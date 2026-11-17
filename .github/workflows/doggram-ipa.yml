@@ -88,12 +88,31 @@ jobs:
         run: |
           set -euo pipefail
           cd "$DOGGRAM_SOURCE_DIR"
-          python3 build-system/Make/ImportCertificates.py \
-            --path build-system/fake-codesigning/certs
           mkdir -p build-system/doggram-verification-signing/certs
           cp build-system/fake-codesigning/certs/* \
             build-system/doggram-verification-signing/certs/
+          # Generate profiles first: the generator rewrites the keychain search list, which
+          # would drop a keychain imported before it.
           python3 build-system/Make/PrepareDogGramVerificationProfiles.py
+          python3 build-system/Make/ImportCertificates.py \
+            --path build-system/fake-codesigning/certs
+
+          # Fail fast (before a ~50 minute compile) if codesign cannot see the identity
+          # whose certificate the generated profiles reference.
+          security list-keychains -d user
+          IDENTITIES="$(security find-identity -p codesigning)"
+          echo "$IDENTITIES"
+          for profile in build-system/doggram-verification-signing/profiles/*.mobileprovision; do
+            security cms -D -i "$profile" > profile.plist
+            python3 -c 'import plistlib,sys; sys.stdout.buffer.write(plistlib.load(open("profile.plist","rb"))["DeveloperCertificates"][0])' > profile-cert.der
+            SHA1="$(openssl x509 -inform DER -in profile-cert.der -noout -fingerprint -sha1 | sed 's/.*=//; s/://g')"
+            if ! echo "$IDENTITIES" | grep -qi "$SHA1"; then
+              echo "::error::No signing identity $SHA1 for $profile"
+              exit 1
+            fi
+          done
+          rm -f profile.plist profile-cert.der
+          echo "All profiles have a matching signing identity"
 
       - name: Build Dog Gram IPA
         shell: bash
