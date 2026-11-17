@@ -41,7 +41,7 @@ This checkout runs on Windows and has no Xcode. Xcode is a macOS tool; Apple pub
 
 Sideloadly runs on Windows and can sign/install an existing IPA; it does not compile the Swift project. Sideloadly's FAQ says a free Apple account signature lasts 7 days and permits 3 sideloaded apps. A paid Apple Developer account can sign for longer. Keep the signing certificate, provisioning profile, API hash and Apple credentials on the Mac or in private CI secrets; do not commit them.
 
-GitHub Actions builds an unsigned device IPA when no Apple Team ID or signing profiles are available. The IPA must be re-signed with Sideloadly or another signing tool before installing on an iPhone. Push notifications and other Apple-managed capabilities won't work without matching Apple signing entitlements. Its standard Apple Silicon runner has 7 GB RAM, so a full Bazel build may exceed the available memory.
+GitHub Actions uses Telegram's public fake-signing fixtures to build a device IPA without the user's Apple Team ID. The IPA is not trusted by iOS and must be re-signed with Sideloadly or another signing tool before installation. Push notifications and other Apple-managed capabilities won't work without matching Apple signing entitlements. The standard Apple Silicon runner has 7 GB RAM, so a full Bazel build may exceed the available memory.
 
 ### GitHub Actions setup
 
@@ -50,7 +50,7 @@ The manual workflow is in `.github/workflows/doggram-ipa.yml`. Add these reposit
 - `DOGGRAM_API_ID`
 - `DOGGRAM_API_HASH`
 
-Then open **Actions → Dog Gram IPA → Run workflow** and choose `debug_arm64`. GitHub uploads the resulting unsigned IPA as a downloadable workflow artifact. Download it to Windows and sign/install it with Sideloadly. The workflow is manual-only so a code push does not start a paid Mac build.
+Then open **Actions → Dog Gram IPA → Run workflow** and choose `debug_arm64`. GitHub uploads the fake-signed IPA as a downloadable workflow artifact. Download it to Windows and re-sign/install it with Sideloadly. The workflow is manual-only so a code push does not start a paid Mac build.
 
 ## Work still needed
 

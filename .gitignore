@@ -89,3 +89,4 @@ build/accessibility/
 # Local Dog Gram credentials; create from build-system/doggram-development-configuration.example.json.
 build-system/doggram-local-configuration.json
 build-system/doggram-signing/
+build-system/doggram-verification-signing/

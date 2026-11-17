@@ -75,10 +75,24 @@ jobs:
               configuration = json.load(file)
           configuration["api_id"] = os.environ["DOGGRAM_API_ID"]
           configuration["api_hash"] = os.environ["DOGGRAM_API_HASH"]
-          configuration["team_id"] = ""
+          # Only used by the locally generated test profiles signed with Telegram's public
+          # fake certificate. This is not the user's Apple Team ID.
+          configuration["team_id"] = "C67CF9S4VU"
           with open(destination, "w", encoding="utf-8") as file:
               json.dump(configuration, file, indent=2)
           PY
+
+      - name: Prepare fake signing for Sideloadly re-signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$DOGGRAM_SOURCE_DIR"
+          python3 build-system/Make/ImportCertificates.py \
+            --path build-system/fake-codesigning/certs
+          mkdir -p build-system/doggram-verification-signing/certs
+          cp build-system/fake-codesigning/certs/* \
+            build-system/doggram-verification-signing/certs/
+          python3 build-system/Make/PrepareDogGramVerificationProfiles.py
 
       - name: Build Dog Gram IPA
         shell: bash
@@ -98,20 +112,19 @@ jobs:
             --bazelUserRoot="/private/var/tmp/_bazel_doggram" \
             build \
             --configurationPath=build-system/doggram-local-configuration.json \
-            --xcodeManagedCodesigning \
-            --disableProvisioningProfiles \
+            --codesigningInformationPath=build-system/doggram-verification-signing \
             --configuration="$BUILD_CONFIGURATION" \
             --buildNumber="$BUILD_NUMBER" \
             --outputBuildArtifactsPath=build/artifacts
 
           mkdir -p "$GITHUB_WORKSPACE/artifacts"
           cp build/artifacts/Telegram.ipa \
-            "$GITHUB_WORKSPACE/artifacts/DogGram-${BUILD_CONFIGURATION}-unsigned-${BUILD_NUMBER}.ipa"
+            "$GITHUB_WORKSPACE/artifacts/DogGram-${BUILD_CONFIGURATION}-resign-required-${BUILD_NUMBER}.ipa"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v6
         with:
-          name: DogGram-${{ inputs.configuration }}-unsigned-${{ github.run_number }}
+          name: DogGram-${{ inputs.configuration }}-resign-required-${{ github.run_number }}
           path: artifacts/*.ipa
           if-no-files-found: error
           retention-days: 14
