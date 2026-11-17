@@ -37,8 +37,7 @@ jobs:
           test -d "$XCODE_PATH"
           sudo xcode-select -s "$XCODE_PATH"
           XCODEBUILD_VERSION_OUTPUT="$(xcodebuild -version)"
-          ACTUAL_VERSION="$(printf '%s
-' "$XCODEBUILD_VERSION_OUTPUT" | awk '/^Xcode / { print $2 }')"
+          ACTUAL_VERSION="$(echo "$XCODEBUILD_VERSION_OUTPUT" | awk '/^Xcode / { print $2 }')"
           echo "Using Xcode $ACTUAL_VERSION"
           test "$ACTUAL_VERSION" = "$XCODE_VERSION"
 
