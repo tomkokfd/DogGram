@@ -41,20 +41,16 @@ This checkout runs on Windows and has no Xcode. Xcode is a macOS tool; Apple pub
 
 Sideloadly runs on Windows and can sign/install an existing IPA; it does not compile the Swift project. Sideloadly's FAQ says a free Apple account signature lasts 7 days and permits 3 sideloaded apps. A paid Apple Developer account can sign for longer. Keep the signing certificate, provisioning profile, API hash and Apple credentials on the Mac or in private CI secrets; do not commit them.
 
-GitHub Actions is another route: it offers macOS runners with Xcode 27 labels and supports signing with repository secrets. Its standard Apple Silicon runner currently has 7 GB RAM, so a dedicated remote Mac may be a better fit for Telegram-iOS's full Bazel build.
+GitHub Actions builds an unsigned device IPA when no Apple Team ID or signing profiles are available. The IPA must be re-signed with Sideloadly or another signing tool before installing on an iPhone. Push notifications and other Apple-managed capabilities won't work without matching Apple signing entitlements. Its standard Apple Silicon runner has 7 GB RAM, so a full Bazel build may exceed the available memory.
 
 ### GitHub Actions setup
 
-The manual workflow is in `.github/workflows/doggram-ipa.yml`. After this repository is pushed to GitHub, add these repository secrets in **Settings → Secrets and variables → Actions**:
+The manual workflow is in `.github/workflows/doggram-ipa.yml`. Add these repository secrets in **Settings → Secrets and variables → Actions**:
 
 - `DOGGRAM_API_ID`
 - `DOGGRAM_API_HASH`
-- `DOGGRAM_TEAM_ID`
-- `DOGGRAM_SIGNING_DATA_BASE64`
 
-`DOGGRAM_SIGNING_DATA_BASE64` is a base64-encoded ZIP whose root contains `certs/` and `profiles/`. Put your Apple signing `.p12` certificate in `certs/` and matching `.mobileprovision` files in `profiles/` for the app (`org.doggram.ios`) and each enabled extension, using the same bundle suffixes as Telegram-iOS (such as `.Share`, `.NotificationService`, `.NotificationContent`, `.SiriIntents`, `.Widget`, and `.BroadcastUpload`). The main app profile must include the push notification entitlement. The included certificate import script expects the `.p12` to have an empty password. Keep this ZIP and the credentials in GitHub Secrets; the local signing directory is ignored by Git.
-
-Then open **Actions → Dog Gram IPA → Run workflow** and choose `debug_arm64` for a device test. GitHub uploads the resulting IPA as a downloadable workflow artifact. Sideloadly can then sign/install it from Windows. The workflow is manual-only so a code push does not start a paid Mac build.
+Then open **Actions → Dog Gram IPA → Run workflow** and choose `debug_arm64`. GitHub uploads the resulting unsigned IPA as a downloadable workflow artifact. Download it to Windows and sign/install it with Sideloadly. The workflow is manual-only so a code push does not start a paid Mac build.
 
 ## Work still needed
 

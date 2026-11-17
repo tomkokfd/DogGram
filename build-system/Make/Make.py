@@ -621,6 +621,9 @@ def build(bazel, arguments):
     if arguments.lock:
         bazel_command_line.set_lock(True)
 
+    if arguments.disableProvisioningProfiles:
+        bazel_command_line.set_disable_provisioning_profiles()
+
     if arguments.cacheDir is not None:
         bazel_command_line.add_cache_dir(arguments.cacheDir)
     elif arguments.cacheHost is not None:
@@ -1040,6 +1043,15 @@ if __name__ == '__main__':
         metavar='number'
     )
     add_project_and_build_common_arguments(buildParser)
+    buildParser.add_argument(
+        '--disableProvisioningProfiles',
+        action='store_true',
+        default=False,
+        help='''
+            Build without embedding provisioning profiles. The resulting device IPA is not installable as-is
+            and must be re-signed with a valid Apple account before installation.
+            '''
+    )
     buildParser.add_argument(
         '--configuration',
         choices=[

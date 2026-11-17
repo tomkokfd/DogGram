@@ -49,16 +49,14 @@ jobs:
           ditto "$GITHUB_WORKSPACE" "$SOURCE_DIR"
           echo "DOGGRAM_SOURCE_DIR=$SOURCE_DIR" >> "$GITHUB_ENV"
 
-      - name: Prepare private build configuration and signing data
+      - name: Prepare private build configuration
         shell: bash
         env:
           DOGGRAM_API_ID: ${{ secrets.DOGGRAM_API_ID }}
           DOGGRAM_API_HASH: ${{ secrets.DOGGRAM_API_HASH }}
-          DOGGRAM_TEAM_ID: ${{ secrets.DOGGRAM_TEAM_ID }}
-          DOGGRAM_SIGNING_DATA_BASE64: ${{ secrets.DOGGRAM_SIGNING_DATA_BASE64 }}
         run: |
           set -euo pipefail
-          for name in DOGGRAM_API_ID DOGGRAM_API_HASH DOGGRAM_TEAM_ID DOGGRAM_SIGNING_DATA_BASE64; do
+          for name in DOGGRAM_API_ID DOGGRAM_API_HASH; do
             if [ -z "${!name:-}" ]; then
               echo "::error::Missing GitHub Actions secret: $name"
               exit 1
@@ -66,7 +64,7 @@ jobs:
           done
 
           cd "$DOGGRAM_SOURCE_DIR"
-          export DOGGRAM_API_ID DOGGRAM_API_HASH DOGGRAM_TEAM_ID
+          export DOGGRAM_API_ID DOGGRAM_API_HASH
           python3 - <<'PY'
           import json
           import os
@@ -77,26 +75,10 @@ jobs:
               configuration = json.load(file)
           configuration["api_id"] = os.environ["DOGGRAM_API_ID"]
           configuration["api_hash"] = os.environ["DOGGRAM_API_HASH"]
-          configuration["team_id"] = os.environ["DOGGRAM_TEAM_ID"]
+          configuration["team_id"] = ""
           with open(destination, "w", encoding="utf-8") as file:
               json.dump(configuration, file, indent=2)
           PY
-
-          SIGNING_DIR="$DOGGRAM_SOURCE_DIR/build-system/doggram-signing"
-          mkdir -p "$SIGNING_DIR"
-          printf '%s' "$DOGGRAM_SIGNING_DATA_BASE64" | base64 -D > /tmp/doggram-signing.zip
-          ditto -x -k /tmp/doggram-signing.zip "$SIGNING_DIR"
-          test -d "$SIGNING_DIR/certs"
-          test -d "$SIGNING_DIR/profiles"
-          rm -f /tmp/doggram-signing.zip
-
-      - name: Import Apple signing certificate
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$DOGGRAM_SOURCE_DIR"
-          python3 build-system/Make/ImportCertificates.py \
-            --path build-system/doggram-signing/certs
 
       - name: Build Dog Gram IPA
         shell: bash
@@ -116,19 +98,20 @@ jobs:
             --bazelUserRoot="/private/var/tmp/_bazel_doggram" \
             build \
             --configurationPath=build-system/doggram-local-configuration.json \
-            --codesigningInformationPath=build-system/doggram-signing \
+            --xcodeManagedCodesigning \
+            --disableProvisioningProfiles \
             --configuration="$BUILD_CONFIGURATION" \
             --buildNumber="$BUILD_NUMBER" \
             --outputBuildArtifactsPath=build/artifacts
 
           mkdir -p "$GITHUB_WORKSPACE/artifacts"
           cp build/artifacts/Telegram.ipa \
-            "$GITHUB_WORKSPACE/artifacts/DogGram-${BUILD_CONFIGURATION}-${BUILD_NUMBER}.ipa"
+            "$GITHUB_WORKSPACE/artifacts/DogGram-${BUILD_CONFIGURATION}-unsigned-${BUILD_NUMBER}.ipa"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v6
         with:
-          name: DogGram-${{ inputs.configuration }}-${{ github.run_number }}
+          name: DogGram-${{ inputs.configuration }}-unsigned-${{ github.run_number }}
           path: artifacts/*.ipa
           if-no-files-found: error
           retention-days: 14
