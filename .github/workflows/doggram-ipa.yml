@@ -45,10 +45,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          SOURCE_DIR="/Users/Shared/doggram-ios-${GITHUB_RUN_ID}"
+          # Same path on every run so cached Bazel actions stay valid between runs.
+          SOURCE_DIR="/Users/Shared/doggram-ios"
           mkdir -p /Users/Shared
+          rm -rf "$SOURCE_DIR"
           ditto "$GITHUB_WORKSPACE" "$SOURCE_DIR"
           echo "DOGGRAM_SOURCE_DIR=$SOURCE_DIR" >> "$GITHUB_ENV"
+          echo "DOGGRAM_CACHE_DIR=/Users/Shared/doggram-bazel-cache" >> "$GITHUB_ENV"
+
+      - name: Restore Bazel cache
+        uses: actions/cache/restore@v6
+        with:
+          path: /Users/Shared/doggram-bazel-cache
+          key: doggram-bazel-${{ inputs.configuration }}-${{ github.sha }}
+          restore-keys: |
+            doggram-bazel-${{ inputs.configuration }}-
 
       - name: Prepare private build configuration
         shell: bash
@@ -115,6 +126,7 @@ jobs:
           echo "All profiles have a matching signing identity"
 
       - name: Build Dog Gram IPA
+        id: build
         shell: bash
         env:
           BUILD_CONFIGURATION: ${{ inputs.configuration }}
@@ -130,6 +142,7 @@ jobs:
 
           python3 -u build-system/Make/Make.py \
             --bazelUserRoot="/private/var/tmp/_bazel_doggram" \
+            --cacheDir="$DOGGRAM_CACHE_DIR" \
             build \
             --configurationPath=build-system/doggram-local-configuration.json \
             --codesigningInformationPath=build-system/doggram-verification-signing \
@@ -147,6 +160,15 @@ jobs:
           OUTPUT_IPA="$GITHUB_WORKSPACE/artifacts/DogGram-${BUILD_CONFIGURATION}-${BUILD_NUMBER}.ipa"
           (cd "$STAGE" && zip -qry "$OUTPUT_IPA" Payload)
           ls -la "$OUTPUT_IPA"
+
+      # Saved even when the build fails, so a rerun after a fix only rebuilds what changed.
+      - name: Save Bazel cache
+        if: always() && steps.build.conclusion != 'skipped'
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: /Users/Shared/doggram-bazel-cache
+          key: doggram-bazel-${{ inputs.configuration }}-${{ github.sha }}-${{ github.run_id }}
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v6
