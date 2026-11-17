@@ -1,0 +1,134 @@
+name: Dog Gram IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      configuration:
+        description: Build configuration
+        required: true
+        type: choice
+        default: debug_arm64
+        options:
+          - debug_arm64
+          - release_arm64
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # GitHub's xcode-27 image includes the repository-pinned Xcode 27.1.
+    # The standard runner is 7 GB RAM; use xcode-27-xlarge if the full Bazel
+    # build exceeds the standard runner's memory or disk limits.
+    runs-on: xcode-27
+    timeout-minutes: 360
+    steps:
+      - name: Check out Dog Gram and all source submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Verify Xcode version
+        shell: bash
+        run: |
+          set -euo pipefail
+          XCODE_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["xcode"])')"
+          XCODE_PATH="/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+          test -d "$XCODE_PATH"
+          sudo xcode-select -s "$XCODE_PATH"
+          ACTUAL_VERSION="$(xcodebuild -version | awk '/^Xcode / { print $2; exit }')"
+          test "$ACTUAL_VERSION" = "$XCODE_VERSION"
+
+      - name: Prepare canonical source directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_DIR="/Users/Shared/doggram-ios-${GITHUB_RUN_ID}"
+          mkdir -p /Users/Shared
+          ditto "$GITHUB_WORKSPACE" "$SOURCE_DIR"
+          echo "DOGGRAM_SOURCE_DIR=$SOURCE_DIR" >> "$GITHUB_ENV"
+
+      - name: Prepare private build configuration and signing data
+        shell: bash
+        env:
+          DOGGRAM_API_ID: ${{ secrets.DOGGRAM_API_ID }}
+          DOGGRAM_API_HASH: ${{ secrets.DOGGRAM_API_HASH }}
+          DOGGRAM_TEAM_ID: ${{ secrets.DOGGRAM_TEAM_ID }}
+          DOGGRAM_SIGNING_DATA_BASE64: ${{ secrets.DOGGRAM_SIGNING_DATA_BASE64 }}
+        run: |
+          set -euo pipefail
+          for name in DOGGRAM_API_ID DOGGRAM_API_HASH DOGGRAM_TEAM_ID DOGGRAM_SIGNING_DATA_BASE64; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing GitHub Actions secret: $name"
+              exit 1
+            fi
+          done
+
+          cd "$DOGGRAM_SOURCE_DIR"
+          export DOGGRAM_API_ID DOGGRAM_API_HASH DOGGRAM_TEAM_ID
+          python3 - <<'PY'
+          import json
+          import os
+
+          source = "build-system/doggram-development-configuration.example.json"
+          destination = "build-system/doggram-local-configuration.json"
+          with open(source, encoding="utf-8") as file:
+              configuration = json.load(file)
+          configuration["api_id"] = os.environ["DOGGRAM_API_ID"]
+          configuration["api_hash"] = os.environ["DOGGRAM_API_HASH"]
+          configuration["team_id"] = os.environ["DOGGRAM_TEAM_ID"]
+          with open(destination, "w", encoding="utf-8") as file:
+              json.dump(configuration, file, indent=2)
+          PY
+
+          SIGNING_DIR="$DOGGRAM_SOURCE_DIR/build-system/doggram-signing"
+          mkdir -p "$SIGNING_DIR"
+          printf '%s' "$DOGGRAM_SIGNING_DATA_BASE64" | base64 -D > /tmp/doggram-signing.zip
+          ditto -x -k /tmp/doggram-signing.zip "$SIGNING_DIR"
+          test -d "$SIGNING_DIR/certs"
+          test -d "$SIGNING_DIR/profiles"
+          rm -f /tmp/doggram-signing.zip
+
+      - name: Import Apple signing certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$DOGGRAM_SOURCE_DIR"
+          python3 build-system/Make/ImportCertificates.py \
+            --path build-system/doggram-signing/certs
+
+      - name: Build Dog Gram IPA
+        shell: bash
+        env:
+          BUILD_CONFIGURATION: ${{ inputs.configuration }}
+        run: |
+          set -euo pipefail
+          cd "$DOGGRAM_SOURCE_DIR"
+
+          export APP_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["app"])')"
+          COMMIT_COUNT="$(git rev-list --count HEAD)"
+          BUILD_NUMBER_OFFSET="$(cat build_number_offset)"
+          export COMMIT_COUNT=$((COMMIT_COUNT + BUILD_NUMBER_OFFSET))
+          export BUILD_NUMBER=$((COMMIT_COUNT + GITHUB_RUN_NUMBER))
+
+          python3 -u build-system/Make/Make.py \
+            --bazelUserRoot="/private/var/tmp/_bazel_doggram" \
+            build \
+            --configurationPath=build-system/doggram-local-configuration.json \
+            --codesigningInformationPath=build-system/doggram-signing \
+            --configuration="$BUILD_CONFIGURATION" \
+            --buildNumber="$BUILD_NUMBER" \
+            --outputBuildArtifactsPath=build/artifacts
+
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+          cp build/artifacts/Telegram.ipa \
+            "$GITHUB_WORKSPACE/artifacts/DogGram-${BUILD_CONFIGURATION}-${BUILD_NUMBER}.ipa"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: DogGram-${{ inputs.configuration }}-${{ github.run_number }}
+          path: artifacts/*.ipa
+          if-no-files-found: error
+          retention-days: 14
