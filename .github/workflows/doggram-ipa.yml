@@ -18,9 +18,8 @@ permissions:
 jobs:
   build:
     # GitHub's xcode-27 image includes the repository-pinned Xcode 27.1.
-    # The standard runner is 7 GB RAM; use xcode-27-xlarge if the full Bazel
-    # build exceeds the standard runner's memory or disk limits.
-    runs-on: xcode-27
+    # Telegram-iOS needs more memory than the standard 7 GB runner provides.
+    runs-on: xcode-27-xlarge
     timeout-minutes: 360
     steps:
       - name: Check out Dog Gram and all source submodules
