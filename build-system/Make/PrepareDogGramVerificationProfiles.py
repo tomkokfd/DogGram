@@ -33,6 +33,19 @@ PROFILE_SUFFIXES = {
 }
 
 
+ORIGINAL_BUNDLE_ID = 'ph.telegra.Telegraph'
+
+
+def replace_bundle_id(value):
+    if isinstance(value, str):
+        return value.replace(ORIGINAL_BUNDLE_ID, BUNDLE_ID)
+    if isinstance(value, list):
+        return [replace_bundle_id(item) for item in value]
+    if isinstance(value, dict):
+        return {key: replace_bundle_id(item) for key, item in value.items()}
+    return value
+
+
 def main():
     output_directory = 'build-system/doggram-verification-signing/profiles'
     if os.path.exists(output_directory):
@@ -58,16 +71,10 @@ def main():
             profile['ApplicationIdentifierPrefix'] = [TEAM_ID]
             profile['CreationDate'] = datetime.datetime.utcnow()
             profile['DeveloperCertificates'] = [certificate]
-            profile['Entitlements'] = {
-                'application-identifier': application_identifier,
-                'com.apple.developer.team-identifier': TEAM_ID,
-                'com.apple.security.application-groups': ['group.{}'.format(BUNDLE_ID)],
-                'keychain-access-groups': ['{}.*'.format(TEAM_ID)],
-                'get-task-allow': False,
-            }
-            if not suffix:
-                # The build generator derives its APS environment from the main profile.
-                profile['Entitlements']['aps-environment'] = 'development'
+            # Keep Telegram's original fake-signing entitlements so they match what the app
+            # requests, only re-pointing identifiers to the Dog Gram bundle ID.
+            profile['Entitlements'] = replace_bundle_id(profile['Entitlements'])
+            profile['Entitlements']['application-identifier'] = application_identifier
             profile['ExpirationDate'] = datetime.datetime.utcnow() + datetime.timedelta(days=365)
             profile['IsXcodeManaged'] = False
             profile['Name'] = 'Dog Gram Verification {}'.format(suffix or 'App')
