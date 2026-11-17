@@ -7,10 +7,10 @@ on:
         description: Build configuration
         required: true
         type: choice
-        default: debug_arm64
+        default: release_arm64
         options:
-          - debug_arm64
           - release_arm64
+          - debug_arm64
 
 permissions:
   contents: read
@@ -137,14 +137,21 @@ jobs:
             --buildNumber="$BUILD_NUMBER" \
             --outputBuildArtifactsPath=build/artifacts
 
+          # Sideload-friendly IPA: drop app extensions and the watch app. They need app group /
+          # extra App ID entitlements that free Apple ID signing (Sideloadly) cannot provide.
+          STAGE="$(mktemp -d)"
+          unzip -q build/artifacts/Telegram.ipa -d "$STAGE"
+          rm -rf "$STAGE"/Payload/*.app/PlugIns "$STAGE"/Payload/*.app/Watch "$STAGE"/Payload/*.app/Extensions
+          find "$STAGE" -name '.DS_Store' -delete
           mkdir -p "$GITHUB_WORKSPACE/artifacts"
-          cp build/artifacts/Telegram.ipa \
-            "$GITHUB_WORKSPACE/artifacts/DogGram-${BUILD_CONFIGURATION}-resign-required-${BUILD_NUMBER}.ipa"
+          OUTPUT_IPA="$GITHUB_WORKSPACE/artifacts/DogGram-${BUILD_CONFIGURATION}-${BUILD_NUMBER}.ipa"
+          (cd "$STAGE" && zip -qry "$OUTPUT_IPA" Payload)
+          ls -la "$OUTPUT_IPA"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v6
         with:
-          name: DogGram-${{ inputs.configuration }}-resign-required-${{ github.run_number }}
+          name: DogGram-${{ inputs.configuration }}-${{ github.run_number }}
           path: artifacts/*.ipa
           if-no-files-found: error
           retention-days: 14

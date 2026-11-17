@@ -30,6 +30,23 @@ public final class PasscodeEnvironment: @unchecked Sendable {
     private var configuration: PasscodeConfiguration?
     private var resolvePrivateAccessGroup: (() -> String?)?
     private var resolvedPrivateAccessGroup: String?
+    private var _usesDefaultSharedKeychainAccessGroup = false
+
+    /// Dog Gram: set when the app runs without its app group entitlement (sideloaded with a free
+    /// Apple ID). Shared passcode items then use the app's default keychain access group, since the
+    /// `group.` access group would fail with errSecMissingEntitlement.
+    public var usesDefaultSharedKeychainAccessGroup: Bool {
+        get {
+            self.mutex.lock()
+            defer { self.mutex.unlock() }
+            return self._usesDefaultSharedKeychainAccessGroup
+        }
+        set {
+            self.mutex.lock()
+            defer { self.mutex.unlock() }
+            self._usesDefaultSharedKeychainAccessGroup = newValue
+        }
+    }
 
     init() {
         
@@ -124,7 +141,11 @@ final class PasscodeKeychain: PasscodeStorage {
             kSecAttrSynchronizable as String: false
         ]
         #if !os(macOS)
-        query[kSecAttrAccessGroup as String] = try account.hasPrefix("biometric.") ? self.environment.privateAccessGroup() : self.environment.sharedAccessGroup()
+        if account.hasPrefix("biometric.") {
+            query[kSecAttrAccessGroup as String] = try self.environment.privateAccessGroup()
+        } else if !self.environment.usesDefaultSharedKeychainAccessGroup {
+            query[kSecAttrAccessGroup as String] = try self.environment.sharedAccessGroup()
+        }
         #endif
         return query
     }

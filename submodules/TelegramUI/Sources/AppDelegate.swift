@@ -568,8 +568,25 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         try! PasscodeEnvironment.shared.configure(PasscodeConfiguration(appGroupIdentifier: appGroupName, processRole: .mainApp, biometricKeychainService: walletBiometricKeychainService), privateAccessGroup: {
             BuildConfig.keychainAccessGroup(baseAppBundleId: baseAppBundleId)
         })
-        let maybeAppGroupUrl = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName)
-        
+        var maybeAppGroupUrl = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName)
+        // Dog Gram: sideloaded builds (e.g. Sideloadly with a free Apple ID) are re-signed without the
+        // app group entitlement, so the shared container is missing or not writable. Fall back to the
+        // app's own sandbox instead of stopping at "Error 2" on a black screen.
+        if let url = maybeAppGroupUrl {
+            let probeUrl = url.appendingPathComponent(".doggram-write-probe")
+            if (try? Data().write(to: probeUrl)) == nil {
+                maybeAppGroupUrl = nil
+            } else {
+                try? FileManager.default.removeItem(at: probeUrl)
+            }
+        }
+        if maybeAppGroupUrl == nil, let libraryUrl = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first {
+            let fallbackUrl = libraryUrl.appendingPathComponent("DogGramSharedContainer", isDirectory: true)
+            try? FileManager.default.createDirectory(at: fallbackUrl, withIntermediateDirectories: true)
+            maybeAppGroupUrl = fallbackUrl
+            PasscodeEnvironment.shared.usesDefaultSharedKeychainAccessGroup = true
+        }
+
         let buildConfig = BuildConfig(baseAppBundleId: baseAppBundleId)
         self.buildConfig = buildConfig
         let signatureDict = BuildConfigExtra.signatureDict()
