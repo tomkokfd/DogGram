@@ -433,6 +433,10 @@ public final class DogGramControlController: TelegramBaseController, UIImagePick
         self.title = "Dog Gram Control"
     }
 
+    required public init(coder aDecoder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
     override public func loadDisplayNode() {
         let panel = DogGramControlView()
         panel.onAction = { [weak panel] action in
