@@ -36,7 +36,10 @@ jobs:
           XCODE_PATH="/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
           test -d "$XCODE_PATH"
           sudo xcode-select -s "$XCODE_PATH"
-          ACTUAL_VERSION="$(xcodebuild -version | awk '/^Xcode / { print $2; exit }')"
+          XCODEBUILD_VERSION_OUTPUT="$(xcodebuild -version)"
+          ACTUAL_VERSION="$(printf '%s
+' "$XCODEBUILD_VERSION_OUTPUT" | awk '/^Xcode / { print $2 }')"
+          echo "Using Xcode $ACTUAL_VERSION"
           test "$ACTUAL_VERSION" = "$XCODE_VERSION"
 
       - name: Prepare canonical source directory
