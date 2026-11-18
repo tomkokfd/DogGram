@@ -741,18 +741,25 @@ final class PeerInfoHeaderNode: ASDisplayNode {
             }
         }
 
-        // DogGram-only visual badge: it uses Telegram's native checkmark rendering,
-        // but does not change the account's Telegram verification state.
+        // DogGram-only visual badge: it uses Telegram's native premium/checkmark rendering,
+        // but does not change the account's real Telegram premium or verification state.
         var dogGramShowsVerifiedBadge = false
+        var dogGramShowsPremiumBadge = false
         if self.isMyProfile,
            let settingsData = UserDefaults.standard.data(forKey: "DogGram.VisualSettings.v1.\(self.context.account.peerId.toInt64())"),
            let settingsObject = try? JSONSerialization.jsonObject(with: settingsData),
            let settings = settingsObject as? [String: Any] {
+            let premiumDemo = settings["premiumDemo"] as? Bool == true
             let checkDemo = settings["checkDemo"] as? Bool == true
             let verification = settings["verification"] as? String ?? "Выключена"
+            if premiumDemo && credibilityIcon == .none {
+                credibilityIcon = .premium
+                dogGramShowsPremiumBadge = true
+            }
             if checkDemo || verification != "Выключена" {
                 credibilityIcon = .verified
                 dogGramShowsVerifiedBadge = true
+                dogGramShowsPremiumBadge = false
             }
         }
         
@@ -1299,6 +1306,9 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         }
         if dogGramShowsVerifiedBadge {
             isVerified = true
+        }
+        if dogGramShowsPremiumBadge {
+            isPremium = true
         }
         
         let titleShadowColor: UIColor? = nil

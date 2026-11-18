@@ -68,6 +68,8 @@ private struct DogGramVisualSettings: Codable {
 private final class DogGramControlView: UIView {
     var onAction: ((String) -> Void)?
     var onInputRequested: ((String, String, @escaping (String) -> Void) -> Void)?
+    var onDualInputRequested: ((String, (String, String), (String, String), @escaping (String, String) -> Void) -> Void)?
+    var onOptionsRequested: ((String, [(title: String, destructive: Bool)], @escaping (String) -> Void) -> Void)?
     var onNotice: ((String) -> Void)?
     var onImageRequested: (() -> Void)?
     var onConfirmationRequested: ((String, String, @escaping (Bool) -> Void) -> Void)?
@@ -132,10 +134,12 @@ private final class DogGramControlView: UIView {
         case "premium": self.settings.premiumDemo.toggle()
         case "check": self.settings.checkDemo.toggle()
         case "avatar": self.onImageRequested?()
+        case "access":
+            self.onNotice?("Доступ к DuckGram уже открыт на этом устройстве. Повторная проверка не требуется.")
         case "verification":
-            self.onInputRequested?("Верификация", self.settings.verification) { [weak self] value in
+            self.onOptionsRequested?("Верификация", [("Major", false), ("Hold", false), ("Выключить", true)]) { [weak self] value in
                 guard let self else { return }
-                self.settings.verification = value
+                self.settings.verification = value == "Выключить" ? "Выключена" : value
                 self.saveSettings()
                 self.render()
             }
@@ -196,23 +200,22 @@ private final class DogGramControlView: UIView {
             }
         case "gramCard": self.onNotice?("Демо-карточка GRAM. Средства не списываются, карта не выпускается.")
         case "addUsername":
-            self.onInputRequested?("Название NFT-юзернейма", "@doggram") { [weak self] name in
-                guard let self, !name.isEmpty else {
+            self.onDualInputRequested?("NFT-юзернейм", ("Имя", "duck"), ("Цена TON", "25")) { [weak self] name, price in
+                guard let self else {
                     return
                 }
-                self.onInputRequested?("Демо-цена", "25") { [weak self] price in
-                    guard let self else {
-                        return
-                    }
-                    self.onInputRequested?("Валюта", "TON") { [weak self] currency in
-                        guard let self else {
-                            return
-                        }
-                        self.settings.usernames.append(DogGramNFTUsername(name: name, price: price, currency: currency))
-                        self.saveSettings()
-                        self.render()
-                    }
+                let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmedName.isEmpty else {
+                    return
                 }
+                self.settings.usernames.append(DogGramNFTUsername(name: trimmedName, price: price, currency: "TON"))
+                self.saveSettings()
+                self.render()
+                let formatter = DateFormatter()
+                formatter.locale = Locale(identifier: "en_US_POSIX")
+                formatter.dateFormat = "d MMM yyyy"
+                let dateString = formatter.string(from: Date())
+                self.onNotice?("Юзернейм @\(trimmedName) закреплён на Fragment \(dateString) за \(price) TON · Demo. Локальная витрина, реальная покупка не выполняется.")
             }
         case "workingHours":
             self.onInputRequested?("Часы работы · Demo", self.settings.workingHours) { [weak self] value in
@@ -331,7 +334,7 @@ private final class DogGramControlView: UIView {
             self.section([("Назад", "", "back"), ("Цвет профиля", self.settings.profileColor, "color"), ("Фоновое изображение", self.settings.profileBackground, "background"), ("Цветовая тема", self.settings.profileTheme, "theme"), ("Часы работы", self.settings.workingHours, "workingHours"), ("Адрес", self.settings.address, "address")])
             self.addAppearancePreview()
         default:
-            self.section([("Доступ", "Проверить ›", "verification"), ("Выбор профиля", "Мой профиль ›", "profilePicker")])
+            self.section([("Доступ", "Проверить ›", "access"), ("Выбор профиля", "Мой профиль ›", "profilePicker")])
             self.section([("Профиль", "", "profile"), ("Подарки", "", "gifts"), ("Балансы", "", "balances")])
             self.section([("Очистить всё оформление", "", "reset")], destructive: true)
         }
@@ -509,6 +512,45 @@ public final class DogGramControlController: TelegramBaseController, UIImagePick
             alert.addAction(UIAlertAction(title: "Сохранить", style: .default) { _ in
                 completed(alert.textFields?.first?.text ?? value)
             })
+            self.present(alert, animated: true)
+        }
+        panel.onDualInputRequested = { [weak self] title, first, second, completed in
+            guard let self else {
+                return
+            }
+            let alert = UIAlertController(title: title, message: "Изменение локального оформления", preferredStyle: .alert)
+            alert.addTextField { field in
+                field.placeholder = first.0
+                field.text = first.1
+            }
+            alert.addTextField { field in
+                field.placeholder = second.0
+                field.text = second.1
+            }
+            alert.addAction(UIAlertAction(title: "Отмена", style: .cancel))
+            alert.addAction(UIAlertAction(title: "Сохранить", style: .default) { _ in
+                let firstValue = alert.textFields?.first?.text ?? first.1
+                let secondValue = alert.textFields?.last?.text ?? second.1
+                completed(firstValue, secondValue)
+            })
+            self.present(alert, animated: true)
+        }
+        panel.onOptionsRequested = { [weak self] title, options, completed in
+            guard let self else {
+                return
+            }
+            let alert = UIAlertController(title: title, message: nil, preferredStyle: .actionSheet)
+            for option in options {
+                alert.addAction(UIAlertAction(title: option.title, style: option.destructive ? .destructive : .default) { _ in
+                    completed(option.title)
+                })
+            }
+            alert.addAction(UIAlertAction(title: "Отмена", style: .cancel))
+            if let popover = alert.popoverPresentationController {
+                popover.sourceView = self.view
+                popover.sourceRect = CGRect(x: self.view.bounds.midX, y: self.view.bounds.midY, width: 0, height: 0)
+                popover.permittedArrowDirections = []
+            }
             self.present(alert, animated: true)
         }
         panel.onNotice = { [weak self] message in
