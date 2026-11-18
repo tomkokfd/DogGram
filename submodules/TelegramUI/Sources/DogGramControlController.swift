@@ -86,7 +86,7 @@ private final class DogGramControlView: UIView {
         case "gifts": return "Подарки"
         case "nft": return "NFT-юзернеймы"
         case "style": return "Оформление"
-        default: return "DogGram"
+        default: return "DuckGram"
         }
     }
 
@@ -94,7 +94,7 @@ private final class DogGramControlView: UIView {
         self.accountId = accountId
         self.settings = DogGramVisualSettings.load(accountId: accountId)
         super.init(frame: .zero)
-        self.backgroundColor = UIColor(red: 0.09, green: 0.13, blue: 0.17, alpha: 1.0)
+        self.backgroundColor = .systemGroupedBackground
         self.scrollView.alwaysBounceVertical = true
         self.addSubview(self.scrollView)
         self.stack.axis = .vertical
@@ -122,7 +122,7 @@ private final class DogGramControlView: UIView {
 
     func perform(_ action: String) {
         switch action {
-        case "profile": self.page = "profile"
+        case "profile", "profilePicker": self.page = "profile"
         case "balances": self.page = "balances"
         case "gifts": self.page = "gifts"
         case "nft": self.page = "nft"
@@ -133,7 +133,12 @@ private final class DogGramControlView: UIView {
         case "check": self.settings.checkDemo.toggle()
         case "avatar": self.onImageRequested?()
         case "verification":
-            self.settings.verification = self.settings.verification == "Major · Demo" ? "Hold · Demo" : (self.settings.verification == "Hold · Demo" ? "Выключена" : "Major · Demo")
+            self.onInputRequested?("Верификация", self.settings.verification) { [weak self] value in
+                guard let self else { return }
+                self.settings.verification = value
+                self.saveSettings()
+                self.render()
+            }
         case "level": self.settings.level = self.settings.level == "Обычный" ? "Пользовательский · Demo" : "Обычный"
         case "number":
             self.onInputRequested?("Номер профиля · Demo", self.settings.displayNumber) { [weak self] value in
@@ -256,13 +261,17 @@ private final class DogGramControlView: UIView {
                 }
             }
         case "addGift":
-            self.onConfirmationRequested?("Подарок · Demo", "Демонстрационный элемент. Покупка не совершается.") { [weak self] confirmed in
-                guard let self, confirmed else {
-                    return
+            self.onInputRequested?("Получатель подарка", "@username") { [weak self] recipient in
+                guard let self, !recipient.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                self.onInputRequested?("Подпись", "") { [weak self] caption in
+                    guard let self else { return }
+                    self.onConfirmationRequested?("Отправить подарок", "Записать подарок локально? Реальная отправка не выполняется.") { [weak self] confirmed in
+                        guard let self, confirmed else { return }
+                        self.settings.gifts.append("Подарок · \(recipient)" + (caption.isEmpty ? "" : " · \(caption)"))
+                        self.saveSettings()
+                        self.render()
+                    }
                 }
-                self.settings.gifts.append("Обычный подарок · Demo")
-                self.saveSettings()
-                self.render()
             }
         case "addNFTGift":
             self.onInputRequested?("Ссылка на NFT · Demo", "https://") { [weak self] link in
@@ -291,26 +300,24 @@ private final class DogGramControlView: UIView {
         }
         switch self.page {
         case "profile":
-            self.addAvatarPreview()
             self.section([("Выбор профиля", "Мой профиль", "back"), ("Назад", "", "back")])
-            self.section([("Локальный аватар", self.settings.avatarData == nil ? "Выбрать" : "Установлен · Demo", "avatar")])
-            self.section([("Premium в DogGram · Demo", "", "premium"), ("Значок в DogGram · Demo", "", "check"), ("Верификация · Demo", self.settings.verification, "verification")])
-            self.section([("Добавить NFT-юзернейм", "", "nft"), ("Номер профиля · Demo", self.settings.displayNumber, "number"), ("Уровень · Demo", self.settings.level, "level"), ("Юзернеймы", "\(self.settings.usernames.count)", "nft")])
-            self.section([("Подарки DogGram · Demo", "\(self.settings.gifts.count)", "gifts"), ("Балансы DogGram · Demo", "Звёзды · GRAM", "balances")])
+            self.section([("Telegram Premium", "", "premium"), ("Галочка Telegram", "", "check"), ("Верификация", self.settings.verification, "verification")])
+            self.section([("Добавить NFT-юзернейм", "", "nft"), ("Номер профиля", self.settings.displayNumber, "number"), ("Уровень", self.settings.level, "level"), ("Юзернеймы", "\(self.settings.usernames.count)", "nft")])
             self.section([("Цвета и фон профиля", "", "style"), ("Часы работы", self.settings.workingHours, "workingHours"), ("Адрес", self.settings.address, "address")])
         case "balances":
             self.section([("Выбор профиля", "Мой профиль", "back"), ("Назад", "", "back")])
-            self.section([("Баланс звёзд · Demo", self.settings.stars, "stars"), ("Изменить баланс · Demo", "", "addStarsOperation"), ("Мои операции звёзд · Demo", "", "operations")])
-            self.section([("Баланс GRAM · Demo", self.settings.gram, "gram"), ("Изменить баланс · Demo", "", "addGramOperation"), ("Оформить карточку GRAM · Demo", "", "gramCard"), ("Мои операции GRAM · Demo", "", "operations")])
+            self.section([("Баланс звёзд", self.settings.stars, "stars"), ("Добавить операцию", "", "addStarsOperation"), ("Мои операции звёзд", "", "operations")])
+            self.section([("Баланс GRAM", self.settings.gram, "gram"), ("Добавить операцию", "", "addGramOperation"), ("Оформить карточку GRAM", "", "gramCard"), ("Мои операции GRAM", "", "operations")])
             self.section(self.settings.demoAssets.map { ($0.name, "\($0.quantity) · \($0.displayedValue) \($0.currency)", "balances") } + [("Добавить демо-актив", "", "addAsset")])
         case "operations":
             self.section([("Назад", "", "back")])
             self.section(self.settings.demoOperations.map { ($0, "Demo", "operations") })
         case "gifts":
-            self.section([("Назад", "", "back"), ("Добавить NFT в профиль", "Demo", "addNFTGift"), ("Добавить подарок", "Demo", "addGift"), ("Демо-сценарий отправки", "Demo", "sendGift")])
+            self.section([("Выбор профиля", "Мой профиль", "profilePicker"), ("Назад", "", "back")])
+            self.section([("Отправить NFT", "", "addNFTGift"), ("Отправить обычный подарок", "", "addGift")])
             self.section(self.settings.gifts.map { ($0, "Demo", "sendGift") })
         case "nft":
-            self.section([("Назад", "", "back"), ("Добавить юзернейм", "Demo", "addUsername")])
+            self.section([("Назад", "", "back"), ("Добавить юзернейм", "", "addUsername")])
             self.section(self.settings.usernames.map { ($0.name, "\($0.price) \($0.currency) · NFT", "nft") })
             if !self.settings.usernames.isEmpty {
                 let explanation = UILabel()
@@ -324,18 +331,10 @@ private final class DogGramControlView: UIView {
             self.section([("Назад", "", "back"), ("Цвет профиля", self.settings.profileColor, "color"), ("Фоновое изображение", self.settings.profileBackground, "background"), ("Цветовая тема", self.settings.profileTheme, "theme"), ("Часы работы", self.settings.workingHours, "workingHours"), ("Адрес", self.settings.address, "address")])
             self.addAppearancePreview()
         default:
-            self.section([("Выбор профиля", "Мой профиль", "profile")])
+            self.section([("Доступ", "Проверить ›", "verification"), ("Выбор профиля", "Мой профиль ›", "profilePicker")])
             self.section([("Профиль", "", "profile"), ("Подарки", "", "gifts"), ("Балансы", "", "balances")])
-            self.section([("NFT-юзернеймы", "", "nft"), ("Оформление профиля", "", "style")])
             self.section([("Очистить всё оформление", "", "reset")], destructive: true)
         }
-        let note = UILabel()
-        note.text = "Dog Gram Visual · DEMO\nИзменения сохраняются только на этом устройстве."
-        note.textColor = UIColor(white: 0.58, alpha: 1.0)
-        note.numberOfLines = 0
-        note.font = .systemFont(ofSize: 12)
-        note.textAlignment = .center
-        self.stack.addArrangedSubview(note)
     }
 
     private func saveSettings() {
@@ -345,23 +344,23 @@ private final class DogGramControlView: UIView {
     private func section(_ rows: [(String, String, String)], destructive: Bool = false) {
         let card = UIStackView()
         card.axis = .vertical
-        card.backgroundColor = UIColor(red: 0.13, green: 0.19, blue: 0.24, alpha: 1.0)
+        card.backgroundColor = .secondarySystemGroupedBackground
         card.layer.cornerRadius = 10
         card.clipsToBounds = true
         for (index, row) in rows.enumerated() {
             let rowView = UIView()
             let title = UILabel()
             title.text = row.0
-            title.textColor = destructive ? .systemRed : .white
+            title.textColor = destructive ? .systemRed : .label
             title.font = .systemFont(ofSize: 17, weight: .regular)
             title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             let value = UILabel()
             value.text = row.1
-            value.textColor = UIColor(red: 0.55, green: 0.72, blue: 0.82, alpha: 1.0)
+            value.textColor = .secondaryLabel
             value.font = .systemFont(ofSize: 15)
             value.textAlignment = .right
             let arrow = UIImageView(image: UIImage(systemName: "chevron.right"))
-            arrow.tintColor = UIColor(red: 0.43, green: 0.55, blue: 0.62, alpha: 1.0)
+            arrow.tintColor = .tertiaryLabel
             arrow.contentMode = .scaleAspectFit
             let toggle = UISwitch()
             toggle.isUserInteractionEnabled = false
@@ -404,7 +403,7 @@ private final class DogGramControlView: UIView {
             card.addArrangedSubview(rowView)
             if index < rows.count - 1 {
                 let divider = UIView()
-                divider.backgroundColor = UIColor(red: 0.18, green: 0.25, blue: 0.30, alpha: 1.0)
+                divider.backgroundColor = .separator
                 divider.heightAnchor.constraint(equalToConstant: 1.0 / UIScreen.main.scale).isActive = true
                 card.addArrangedSubview(divider)
             }
@@ -483,7 +482,7 @@ public final class DogGramControlController: TelegramBaseController, UIImagePick
     public init(context: AccountContext) {
         self.accountId = context.account.peerId.toInt64()
         super.init(context: context, navigationBarPresentationData: nil)
-        self.title = "DogGram"
+        self.title = "DuckGram"
     }
 
     required public init(coder aDecoder: NSCoder) {
@@ -502,7 +501,7 @@ public final class DogGramControlController: TelegramBaseController, UIImagePick
             guard let self else {
                 return
             }
-            let alert = UIAlertController(title: title, message: "Локальные данные Dog Gram Visual", preferredStyle: .alert)
+            let alert = UIAlertController(title: title, message: "Изменение локального оформления", preferredStyle: .alert)
             alert.addTextField { field in
                 field.text = value
             }

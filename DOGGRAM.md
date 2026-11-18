@@ -4,8 +4,8 @@ Dog Gram is an unofficial Telegram iOS client fork with a local visual customiza
 
 ## Native integration in this step
 
-- Triple-tapping the Chats tab opens **Dog Gram Control**.
-- The control panel contains Profile, NFT usernames, Gifts, Appearance, Balances and demo operation history.
+- Triple-tapping the Settings tab opens the **DuckGram** visual customization panel shown in the supplied reference video. A normal tap still opens Telegram Settings.
+- The panel follows the reference's grouped settings layout with Access, Profile, Gifts, Balances and a reset action. Profile settings include Premium/check demo switches, verification, NFT usernames, a display number, level, appearance, working hours and address.
 - Profile controls include a local photo-library avatar, demo Premium/check toggles, demo verification and level, and a local display number. The self-profile header shows these values with a clear Dog Gram Visual · DEMO label.
 - Local NFT usernames accept a name, price and currency. Demo gifts show a preview and require confirmation before being added locally.
 - Demo balances and custom assets are editable and saved with `UserDefaults`.

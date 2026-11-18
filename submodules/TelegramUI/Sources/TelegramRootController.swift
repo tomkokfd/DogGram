@@ -238,6 +238,12 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         }
         
         let accountSettingsController = PeerInfoScreenImpl(context: self.context, updatedPresentationData: nil, peerId: self.context.account.peerId, avatarInitiallyExpanded: false, isOpenedFromChat: false, reactionSourceMessageId: nil, callMessages: [], isSettings: true)
+        accountSettingsController.tabBarItemTripleTapAction = { [weak self] in
+            guard let strongSelf = self else {
+                return
+            }
+            strongSelf.pushViewController(DogGramControlController(context: strongSelf.context), animated: true)
+        }
         accountSettingsController.tabBarItemDebugTapAction = { [weak self] in
             guard let strongSelf = self else {
                 return
