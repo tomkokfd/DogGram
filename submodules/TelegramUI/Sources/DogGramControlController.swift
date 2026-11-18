@@ -478,7 +478,10 @@ private final class DogGramControlView: UIView {
 public final class DogGramControlController: TelegramBaseController, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
     private var panelView: DogGramControlView?
 
+    private let accountId: Int64
+
     public init(context: AccountContext) {
+        self.accountId = context.account.peerId.toInt64()
         super.init(context: context, navigationBarPresentationData: nil)
         self.title = "DogGram"
     }
@@ -488,7 +491,7 @@ public final class DogGramControlController: TelegramBaseController, UIImagePick
     }
 
     override public func loadDisplayNode() {
-        let panel = DogGramControlView(accountId: self.context.account.peerId.toInt64())
+        let panel = DogGramControlView(accountId: self.accountId)
         panel.onAction = { [weak panel] action in
             panel?.perform(action)
         }
