@@ -744,7 +744,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         // DogGram-only visual badge: it uses Telegram's native checkmark rendering,
         // but does not change the account's Telegram verification state.
         if self.isMyProfile,
-           let settingsData = UserDefaults.standard.data(forKey: "DogGram.VisualSettings.v1"),
+           let settingsData = UserDefaults.standard.data(forKey: "DogGram.VisualSettings.v1.\(self.context.account.peerId.toInt64())"),
            let settingsObject = try? JSONSerialization.jsonObject(with: settingsData),
            let settings = settingsObject as? [String: Any] {
             let checkDemo = settings["checkDemo"] as? Bool == true
@@ -1459,7 +1459,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         }
 
         if self.isMyProfile,
-           let settingsData = UserDefaults.standard.data(forKey: "DogGram.VisualSettings.v1"),
+           let settingsData = UserDefaults.standard.data(forKey: "DogGram.VisualSettings.v1.\(self.context.account.peerId.toInt64())"),
            let settingsObject = try? JSONSerialization.jsonObject(with: settingsData),
            let settings = settingsObject as? [String: Any] {
             var demoMarkers: [String] = []

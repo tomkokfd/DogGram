@@ -37,21 +37,30 @@ private struct DogGramVisualSettings: Codable {
     var workingHours = "Не заданы"
     var address = "Не задан"
 
-    static let key = "DogGram.VisualSettings.v1"
+    static let legacyKey = "DogGram.VisualSettings.v1"
 
-    static func load() -> DogGramVisualSettings {
-        guard let data = UserDefaults.standard.data(forKey: key),
-              let value = try? JSONDecoder().decode(DogGramVisualSettings.self, from: data) else {
-            return DogGramVisualSettings()
+    static func load(accountId: Int64) -> DogGramVisualSettings {
+        let accountKey = "\(legacyKey).\(accountId)"
+        if let data = UserDefaults.standard.data(forKey: accountKey),
+           let value = try? JSONDecoder().decode(DogGramVisualSettings.self, from: data) {
+            return value
         }
-        return value
+
+        if let data = UserDefaults.standard.data(forKey: legacyKey),
+           let value = try? JSONDecoder().decode(DogGramVisualSettings.self, from: data) {
+            value.save(accountId: accountId)
+            UserDefaults.standard.removeObject(forKey: legacyKey)
+            return value
+        }
+
+        return DogGramVisualSettings()
     }
 
-    func save() {
+    func save(accountId: Int64) {
         guard let data = try? JSONEncoder().encode(self) else {
             return
         }
-        UserDefaults.standard.set(data, forKey: Self.key)
+        UserDefaults.standard.set(data, forKey: "\(Self.legacyKey).\(accountId)")
         NotificationCenter.default.post(name: Notification.Name("DogGramVisualSettingsDidChange"), object: nil)
     }
 }
@@ -63,7 +72,8 @@ private final class DogGramControlView: UIView {
     var onImageRequested: (() -> Void)?
     var onConfirmationRequested: ((String, String, @escaping (Bool) -> Void) -> Void)?
     var onPageChanged: ((String) -> Void)?
-    private var settings = DogGramVisualSettings.load()
+    private let accountId: Int64
+    private var settings: DogGramVisualSettings
     private var page = "control"
     private let stack = UIStackView()
     private let scrollView = UIScrollView()
@@ -80,8 +90,10 @@ private final class DogGramControlView: UIView {
         }
     }
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
+    init(accountId: Int64) {
+        self.accountId = accountId
+        self.settings = DogGramVisualSettings.load(accountId: accountId)
+        super.init(frame: .zero)
         self.backgroundColor = UIColor(red: 0.09, green: 0.13, blue: 0.17, alpha: 1.0)
         self.scrollView.alwaysBounceVertical = true
         self.addSubview(self.scrollView)
@@ -126,19 +138,19 @@ private final class DogGramControlView: UIView {
         case "number":
             self.onInputRequested?("Номер профиля · Demo", self.settings.displayNumber) { [weak self] value in
                 self?.settings.displayNumber = value
-                self?.settings.save()
+                self?.saveSettings()
                 self?.render()
             }
         case "stars":
             self.onInputRequested?("Демо-баланс звёзд", self.settings.stars) { [weak self] value in
                 self?.settings.stars = value
-                self?.settings.save()
+                self?.saveSettings()
                 self?.render()
             }
         case "gram":
             self.onInputRequested?("Демо-баланс GRAM", self.settings.gram) { [weak self] value in
                 self?.settings.gram = value
-                self?.settings.save()
+                self?.saveSettings()
                 self?.render()
             }
         case "addStarsOperation":
@@ -155,7 +167,7 @@ private final class DogGramControlView: UIView {
                 }
                 self.settings.stars = String(updatedBalance)
                 self.settings.demoOperations.append("Stars · \(amount > 0 ? "+" : "")\(amount)")
-                self.settings.save()
+                self.saveSettings()
                 self.render()
             }
         case "addGramOperation":
@@ -174,7 +186,7 @@ private final class DogGramControlView: UIView {
                 self.settings.gram = NSDecimalNumber(decimal: updatedBalance).stringValue
                 let amountString = NSDecimalNumber(decimal: amount).stringValue
                 self.settings.demoOperations.append("GRAM · \(amount > 0 ? "+" : "")\(amountString)")
-                self.settings.save()
+                self.saveSettings()
                 self.render()
             }
         case "gramCard": self.onNotice?("Демо-карточка GRAM. Средства не списываются, карта не выпускается.")
@@ -192,7 +204,7 @@ private final class DogGramControlView: UIView {
                             return
                         }
                         self.settings.usernames.append(DogGramNFTUsername(name: name, price: price, currency: currency))
-                        self.settings.save()
+                        self.saveSettings()
                         self.render()
                     }
                 }
@@ -200,13 +212,13 @@ private final class DogGramControlView: UIView {
         case "workingHours":
             self.onInputRequested?("Часы работы · Demo", self.settings.workingHours) { [weak self] value in
                 self?.settings.workingHours = value
-                self?.settings.save()
+                self?.saveSettings()
                 self?.render()
             }
         case "address":
             self.onInputRequested?("Адрес профиля · Demo", self.settings.address) { [weak self] value in
                 self?.settings.address = value
-                self?.settings.save()
+                self?.saveSettings()
                 self?.render()
             }
         case "color":
@@ -214,7 +226,7 @@ private final class DogGramControlView: UIView {
         case "background":
             self.onInputRequested?("Фоновое изображение · Demo", self.settings.profileBackground) { [weak self] value in
                 self?.settings.profileBackground = value
-                self?.settings.save()
+                self?.saveSettings()
                 self?.render()
             }
         case "theme":
@@ -237,7 +249,7 @@ private final class DogGramControlView: UIView {
                                 return
                             }
                             self.settings.demoAssets.append(DogGramDemoAsset(name: name, quantity: quantity, currency: currency, displayedValue: displayedValue))
-                            self.settings.save()
+                            self.saveSettings()
                             self.render()
                         }
                     }
@@ -249,7 +261,7 @@ private final class DogGramControlView: UIView {
                     return
                 }
                 self.settings.gifts.append("Обычный подарок · Demo")
-                self.settings.save()
+                self.saveSettings()
                 self.render()
             }
         case "addNFTGift":
@@ -259,7 +271,7 @@ private final class DogGramControlView: UIView {
                         return
                     }
                     self.settings.gifts.append("NFT · \(link)")
-                    self.settings.save()
+                    self.saveSettings()
                     self.render()
                 }
             }
@@ -267,7 +279,7 @@ private final class DogGramControlView: UIView {
         case "reset": self.settings = DogGramVisualSettings()
         default: break
         }
-        self.settings.save()
+        self.saveSettings()
         self.render()
     }
 
@@ -324,6 +336,10 @@ private final class DogGramControlView: UIView {
         note.font = .systemFont(ofSize: 12)
         note.textAlignment = .center
         self.stack.addArrangedSubview(note)
+    }
+
+    private func saveSettings() {
+        self.settings.save(accountId: self.accountId)
     }
 
     private func section(_ rows: [(String, String, String)], destructive: Bool = false) {
@@ -448,7 +464,7 @@ private final class DogGramControlView: UIView {
 
     func setAvatar(_ data: Data) {
         self.settings.avatarData = data
-        self.settings.save()
+        self.saveSettings()
         self.render()
     }
 
@@ -472,7 +488,7 @@ public final class DogGramControlController: TelegramBaseController, UIImagePick
     }
 
     override public func loadDisplayNode() {
-        let panel = DogGramControlView()
+        let panel = DogGramControlView(accountId: self.context.account.peerId.toInt64())
         panel.onAction = { [weak panel] action in
             panel?.perform(action)
         }
