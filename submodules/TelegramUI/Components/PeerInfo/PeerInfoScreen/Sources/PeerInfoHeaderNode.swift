@@ -385,7 +385,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         super.init()
 
         self.dogGramSettingsObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DogGramVisualSettingsDidChange"), object: nil, queue: .main) { [weak self] _ in
-            guard let self, self.isMyProfile else {
+            guard let self, self.isMyProfile || self.isSettings else {
                 return
             }
             self.requestUpdateLayout?(true)
@@ -745,7 +745,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         // but does not change the account's real Telegram premium or verification state.
         var dogGramShowsVerifiedBadge = false
         var dogGramShowsPremiumBadge = false
-        if self.isMyProfile,
+        if (self.isMyProfile || self.isSettings),
            let settingsData = UserDefaults.standard.data(forKey: "DogGram.VisualSettings.v1.\(self.context.account.peerId.toInt64())"),
            let settingsObject = try? JSONSerialization.jsonObject(with: settingsData),
            let settings = settingsObject as? [String: Any] {
@@ -1472,11 +1472,17 @@ final class PeerInfoHeaderNode: ASDisplayNode {
             usernameString = ("", MultiScaleTextState.Attributes(font: Font.regular(16.0), color: .white))
         }
 
-        if self.isMyProfile,
+        if (self.isMyProfile || self.isSettings),
            let settingsData = UserDefaults.standard.data(forKey: "DogGram.VisualSettings.v1.\(self.context.account.peerId.toInt64())"),
            let settingsObject = try? JSONSerialization.jsonObject(with: settingsData),
            let settings = settingsObject as? [String: Any] {
             var demoMarkers: [String] = []
+            if let stars = settings["stars"] as? String, stars != "33408112" {
+                demoMarkers.append("⭐️ \(stars) · Demo")
+            }
+            if let gram = settings["gram"] as? String, gram != "381.82" {
+                demoMarkers.append("GRAM \(gram) · Demo")
+            }
             if settings["premiumDemo"] as? Bool == true {
                 demoMarkers.append("Premium · Demo")
             }
