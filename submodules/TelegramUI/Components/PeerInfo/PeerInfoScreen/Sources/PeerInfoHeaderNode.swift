@@ -740,6 +740,18 @@ final class PeerInfoHeaderNode: ASDisplayNode {
                 verifiedIcon = .emojiStatus(PeerEmojiStatus(content: .emoji(fileId: verificationIconFileId), expirationDate: nil))
             }
         }
+
+        // DogGram-only visual badge: it uses Telegram's native checkmark rendering,
+        // but does not change the account's Telegram verification state.
+        if self.isMyProfile,
+           let settingsData = UserDefaults.standard.data(forKey: "DogGram.VisualSettings.v1"),
+           let settingsObject = try? JSONSerialization.jsonObject(with: settingsData),
+           let settings = settingsObject as? [String: Any],
+           let verification = settings["verification"] as? String,
+           verification != "Выключена" {
+            credibilityIcon = .verified
+            isVerified = true
+        }
         
         var isForum = false
         if case let .channel(channel) = peer, channel.isForumOrMonoForum {
