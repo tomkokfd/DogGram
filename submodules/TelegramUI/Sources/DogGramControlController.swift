@@ -142,16 +142,40 @@ private final class DogGramControlView: UIView {
                 self?.render()
             }
         case "addStarsOperation":
-            self.onInputRequested?("Описание операции · Demo", "+1 звезда") { [weak self] value in
-                self?.settings.demoOperations.append("Звёзды · \(value)")
-                self?.settings.save()
-                self?.render()
+            self.onInputRequested?("Изменить демо-баланс Stars (+/-)", "+1") { [weak self] value in
+                guard let self, let amount = Int64(value), amount != 0 else {
+                    self?.onNotice?("Введите целое число, например +10 или -3.")
+                    return
+                }
+                let balance = Int64(self.settings.stars) ?? 0
+                let (updatedBalance, overflow) = balance.addingReportingOverflow(amount)
+                guard !overflow, updatedBalance >= 0 else {
+                    self.onNotice?("Демо-баланс Stars не может быть отрицательным или превышать лимит.")
+                    return
+                }
+                self.settings.stars = String(updatedBalance)
+                self.settings.demoOperations.append("Stars · \(amount > 0 ? "+" : "")\(amount)")
+                self.settings.save()
+                self.render()
             }
         case "addGramOperation":
-            self.onInputRequested?("Описание операции · Demo", "+1 GRAM") { [weak self] value in
-                self?.settings.demoOperations.append("GRAM · \(value)")
-                self?.settings.save()
-                self?.render()
+            self.onInputRequested?("Изменить демо-баланс GRAM (+/-)", "+1") { [weak self] value in
+                let normalizedValue = value.replacingOccurrences(of: ",", with: ".")
+                guard let self, let amount = Decimal(string: normalizedValue), amount != 0 else {
+                    self?.onNotice?("Введите число, например +1.5 или -0.25.")
+                    return
+                }
+                let currentBalance = Decimal(string: self.settings.gram.replacingOccurrences(of: ",", with: ".")) ?? 0
+                let updatedBalance = currentBalance + amount
+                guard updatedBalance >= 0 else {
+                    self.onNotice?("Демо-баланс GRAM не может быть отрицательным.")
+                    return
+                }
+                self.settings.gram = NSDecimalNumber(decimal: updatedBalance).stringValue
+                let amountString = NSDecimalNumber(decimal: amount).stringValue
+                self.settings.demoOperations.append("GRAM · \(amount > 0 ? "+" : "")\(amountString)")
+                self.settings.save()
+                self.render()
             }
         case "gramCard": self.onNotice?("Демо-карточка GRAM. Средства не списываются, карта не выпускается.")
         case "addUsername":
@@ -264,8 +288,8 @@ private final class DogGramControlView: UIView {
             self.section([("Цвета и фон профиля", "", "style"), ("Часы работы", self.settings.workingHours, "workingHours"), ("Адрес", self.settings.address, "address")])
         case "balances":
             self.section([("Выбор профиля", "Мой профиль", "back"), ("Назад", "", "back")])
-            self.section([("Баланс звёзд · Demo", self.settings.stars, "stars"), ("Добавить операцию · Demo", "", "addStarsOperation"), ("Мои операции звёзд · Demo", "", "operations")])
-            self.section([("Баланс GRAM · Demo", self.settings.gram, "gram"), ("Оформить карточку GRAM · Demo", "", "gramCard"), ("Мои операции GRAM · Demo", "", "operations")])
+            self.section([("Баланс звёзд · Demo", self.settings.stars, "stars"), ("Изменить баланс · Demo", "", "addStarsOperation"), ("Мои операции звёзд · Demo", "", "operations")])
+            self.section([("Баланс GRAM · Demo", self.settings.gram, "gram"), ("Изменить баланс · Demo", "", "addGramOperation"), ("Оформить карточку GRAM · Demo", "", "gramCard"), ("Мои операции GRAM · Demo", "", "operations")])
             self.section(self.settings.demoAssets.map { ($0.name, "\($0.quantity) · \($0.displayedValue) \($0.currency)", "balances") } + [("Добавить демо-актив", "", "addAsset")])
         case "operations":
             self.section([("Назад", "", "back")])
@@ -403,11 +427,12 @@ private final class DogGramControlView: UIView {
 
     private func addAppearancePreview() {
         let preview = UIView()
-        preview.backgroundColor = self.settings.profileColor == "Фиолетовый" ? UIColor(red: 0.28, green: 0.20, blue: 0.42, alpha: 1.0) : UIColor(red: 0.12, green: 0.31, blue: 0.48, alpha: 1.0)
+        let baseColor = self.settings.profileColor == "Фиолетовый" ? UIColor(red: 0.28, green: 0.20, blue: 0.42, alpha: 1.0) : UIColor(red: 0.12, green: 0.31, blue: 0.48, alpha: 1.0)
+        preview.backgroundColor = self.settings.profileTheme == "Светлая" ? baseColor.withAlphaComponent(0.72) : baseColor
         preview.layer.cornerRadius = 14
         let label = UILabel()
-        label.text = "Мой профиль\nDog Gram Visual · DEMO"
-        label.textColor = .white
+        label.text = "Мой профиль\n\(self.settings.profileBackground)\nDog Gram Visual · DEMO"
+        label.textColor = self.settings.profileTheme == "Светлая" ? UIColor(white: 0.98, alpha: 1.0) : .white
         label.numberOfLines = 0
         label.font = .systemFont(ofSize: 18, weight: .semibold)
         label.translatesAutoresizingMaskIntoConstraints = false

@@ -746,11 +746,13 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         if self.isMyProfile,
            let settingsData = UserDefaults.standard.data(forKey: "DogGram.VisualSettings.v1"),
            let settingsObject = try? JSONSerialization.jsonObject(with: settingsData),
-           let settings = settingsObject as? [String: Any],
-           let verification = settings["verification"] as? String,
-           verification != "Выключена" {
-            credibilityIcon = .verified
-            isVerified = true
+           let settings = settingsObject as? [String: Any] {
+            let checkDemo = settings["checkDemo"] as? Bool == true
+            let verification = settings["verification"] as? String ?? "Выключена"
+            if checkDemo || verification != "Выключена" {
+                credibilityIcon = .verified
+                isVerified = true
+            }
         }
         
         var isForum = false
