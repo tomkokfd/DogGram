@@ -4,6 +4,8 @@ import Display
 import AsyncDisplayKit
 import TelegramBaseController
 import AccountContext
+import TelegramCore
+import SwiftSignalKit
 
 private struct DogGramNFTUsername: Codable {
     var name: String
@@ -74,6 +76,9 @@ private final class DogGramControlView: UIView {
     var onImageRequested: (() -> Void)?
     var onConfirmationRequested: ((String, String, @escaping (Bool) -> Void) -> Void)?
     var onPageChanged: ((String) -> Void)?
+    // DogGram: open Telegram's real gift/NFT sending flow for `recipient` (username). nftOnly opens
+    // the collectibles (NFT) picker directly; otherwise the full gift picker.
+    var onOpenGiftFlow: ((_ recipient: String, _ nftOnly: Bool) -> Void)?
     private let accountId: Int64
     private var settings: DogGramVisualSettings
     private var page = "control"
@@ -265,29 +270,19 @@ private final class DogGramControlView: UIView {
             }
         case "addGift":
             self.onInputRequested?("Получатель подарка", "@username") { [weak self] recipient in
-                guard let self, !recipient.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-                self.onInputRequested?("Подпись", "") { [weak self] caption in
-                    guard let self else { return }
-                    self.onConfirmationRequested?("Отправить подарок", "Записать подарок локально? Реальная отправка не выполняется.") { [weak self] confirmed in
-                        guard let self, confirmed else { return }
-                        self.settings.gifts.append("Подарок · \(recipient)" + (caption.isEmpty ? "" : " · \(caption)"))
-                        self.saveSettings()
-                        self.render()
-                    }
-                }
+                guard let self else { return }
+                let trimmedRecipient = recipient.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmedRecipient.isEmpty else { return }
+                self.onOpenGiftFlow?(trimmedRecipient, false)
             }
         case "addNFTGift":
-            self.onInputRequested?("Ссылка на NFT · Demo", "https://") { [weak self] link in
-                self?.onConfirmationRequested?("Предпросмотр NFT · Demo", "\(link)\n\nДобавить только в локальную коллекцию Dog Gram?") { [weak self] confirmed in
-                    guard let self, confirmed else {
-                        return
-                    }
-                    self.settings.gifts.append("NFT · \(link)")
-                    self.saveSettings()
-                    self.render()
-                }
+            self.onInputRequested?("Получатель NFT", "@username") { [weak self] recipient in
+                guard let self else { return }
+                let trimmedRecipient = recipient.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmedRecipient.isEmpty else { return }
+                self.onOpenGiftFlow?(trimmedRecipient, true)
             }
-        case "sendGift": self.onNotice?("Демонстрационный сценарий. Ничего не отправлено и не куплено.")
+        case "sendGift": self.onNotice?("Выберите «Отправить NFT» или «Отправить обычный подарок», чтобы открыть выбор подарка.")
         case "reset": self.settings = DogGramVisualSettings()
         default: break
         }
@@ -481,11 +476,56 @@ public final class DogGramControlController: TelegramBaseController, UIImagePick
     private var panelView: DogGramControlView?
 
     private let accountId: Int64
+    private let dogGramContext: AccountContext
+    private let sendGiftDisposable = MetaDisposable()
 
     public init(context: AccountContext) {
         self.accountId = context.account.peerId.toInt64()
+        self.dogGramContext = context
         super.init(context: context, navigationBarPresentationData: nil)
         self.title = "DuckGram"
+    }
+
+    deinit {
+        self.sendGiftDisposable.dispose()
+    }
+
+    private func openGiftFlow(recipient: String, nftOnly: Bool) {
+        let username = recipient.hasPrefix("@") ? String(recipient.dropFirst()) : recipient
+        let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedUsername.isEmpty else {
+            self.panelView?.onNotice?("Укажите юзернейм получателя, например @durov.")
+            return
+        }
+        let context = self.dogGramContext
+        // Resolve the username to a peer, then open Telegram's real gift / NFT sending screen for that peer —
+        // the user picks a gift there and it is sent exactly like a normal Telegram gift.
+        let signal = context.engine.peers.resolvePeerByName(name: trimmedUsername, referrer: nil)
+        |> mapToSignal { result -> Signal<EnginePeer?, NoError> in
+            switch result {
+            case .progress:
+                return .complete()
+            case let .result(peer):
+                return .single(peer)
+            }
+        }
+        |> take(1)
+        |> deliverOnMainQueue
+
+        self.sendGiftDisposable.set(signal.start(next: { [weak self] peer in
+            guard let self else { return }
+            guard let peer else {
+                self.panelView?.onNotice?("Не удалось найти пользователя @\(trimmedUsername).")
+                return
+            }
+            let giftController: ViewController
+            if nftOnly {
+                giftController = context.sharedContext.makeGiftCollectiblesController(context: context, peerId: peer.id)
+            } else {
+                giftController = context.sharedContext.makeGiftOptionsController(context: context, peerId: peer.id, premiumOptions: [], hasBirthday: false, completion: nil)
+            }
+            self.push(giftController)
+        }))
     }
 
     required public init(coder aDecoder: NSCoder) {
@@ -499,6 +539,9 @@ public final class DogGramControlController: TelegramBaseController, UIImagePick
         }
         panel.onPageChanged = { [weak self] title in
             self?.title = title
+        }
+        panel.onOpenGiftFlow = { [weak self] recipient, nftOnly in
+            self?.openGiftFlow(recipient: recipient, nftOnly: nftOnly)
         }
         panel.onInputRequested = { [weak self] title, value, completed in
             guard let self else {

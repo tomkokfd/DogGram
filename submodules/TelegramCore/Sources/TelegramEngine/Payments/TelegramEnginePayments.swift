@@ -263,6 +263,20 @@ public extension TelegramEngine {
         public func getStarGiftUpgradeAttributes(giftId: Int64) -> Signal<[StarGift.UniqueGift.Attribute]?, NoError> {
             return _internal_getStarGiftUpgradeAttributes(account: self.account, giftId: giftId)
         }
+
+        // DogGram-only: insert a LOCAL gift service message into the chat with `peerId`, so a visual gift
+        // (paid with the demo Stars balance) appears as an outgoing gift bubble. Nothing is sent to the server.
+        public func dogGramAddLocalGiftMessage(peerId: EnginePeer.Id, gift: StarGift, text: String, entities: [MessageTextEntity], hideName: Bool) -> Signal<Never, NoError> {
+            let account = self.account
+            return account.postbox.transaction { transaction -> Void in
+                let accountPeerId = account.peerId
+                let timestamp = Int32(Date().timeIntervalSince1970)
+                let action = TelegramMediaAction(action: .starGift(gift: gift, convertStars: nil, text: text.isEmpty ? nil : text, entities: entities.isEmpty ? nil : entities, nameHidden: hideName, savedToProfile: false, converted: false, upgraded: false, canUpgrade: false, upgradeStars: nil, isRefunded: false, isPrepaidUpgrade: false, upgradeMessageId: nil, peerId: nil, senderId: accountPeerId, savedId: nil, prepaidUpgradeHash: nil, giftMessageId: nil, upgradeSeparate: false, isAuctionAcquired: false, toPeerId: peerId, number: nil))
+                let message = StoreMessage(peerId: peerId, namespace: Namespaces.Message.Local, customStableId: nil, globallyUniqueId: Int64.random(in: Int64.min ... Int64.max), groupingKey: nil, threadId: nil, timestamp: timestamp, flags: [], tags: [], globalTags: [], localTags: [], forwardInfo: nil, authorId: accountPeerId, text: "", attributes: [], media: [action])
+                let _ = transaction.addMessages([message], location: .Random)
+            }
+            |> ignoreValues
+        }
     }
 }
 

@@ -552,21 +552,36 @@ private final class GiftSetupScreenComponent: Component {
                 
                 let completion = component.completion
                 
-                let signal = BotCheckoutController.InputData.fetch(context: component.context, source: source)
-                |> `catch` { error -> Signal<BotCheckoutController.InputData, SendBotPaymentFormError> in
-                    switch error {
-                    case .disallowedStarGifts:
-                        return .fail(.disallowedStarGift)
-                    case .starGiftsUserLimit:
-                        return .fail(.starGiftUserLimit)
-                    default:
-                        return .fail(.generic)
+                let signal: Signal<SendBotPaymentResult, SendBotPaymentFormError>
+                if starsContext.dogGramVisualBalance() != nil, case .starGift = component.subject {
+                    // DogGram-only: pay for the gift with the visual demo Stars balance and emit a fake success.
+                    // No real Telegram Stars are spent and no real payment form is sent.
+                    starsContext.dogGramDeductVisualBalance(finalPrice)
+                    if case let .starGift(visualGift, _) = component.subject {
+                        // Insert a local outgoing gift bubble into the chat so the visual gift is visible.
+                        let _ = component.context.engine.payments.dogGramAddLocalGiftMessage(peerId: peerId, gift: .generic(visualGift), text: textInputText.string, entities: entities, hideName: self.hideName).startStandalone()
                     }
+                    let visualResult: Signal<SendBotPaymentResult, NoError> = .single(.done(receiptMessageId: nil, subscriptionPeerId: nil, uniqueStarGift: nil))
+                    signal = visualResult
+                    |> castError(SendBotPaymentFormError.self)
+                    |> deliverOnMainQueue
+                } else {
+                    signal = BotCheckoutController.InputData.fetch(context: component.context, source: source)
+                    |> `catch` { error -> Signal<BotCheckoutController.InputData, SendBotPaymentFormError> in
+                        switch error {
+                        case .disallowedStarGifts:
+                            return .fail(.disallowedStarGift)
+                        case .starGiftsUserLimit:
+                            return .fail(.starGiftUserLimit)
+                        default:
+                            return .fail(.generic)
+                        }
+                    }
+                    |> mapToSignal { inputData -> Signal<SendBotPaymentResult, SendBotPaymentFormError> in
+                        return component.context.engine.payments.sendStarsPaymentForm(formId: inputData.form.id, source: source)
+                    }
+                    |> deliverOnMainQueue
                 }
-                |> mapToSignal { inputData -> Signal<SendBotPaymentResult, SendBotPaymentFormError> in
-                    return component.context.engine.payments.sendStarsPaymentForm(formId: inputData.form.id, source: source)
-                }
-                |> deliverOnMainQueue
                                 
                 let _ = signal.start(next: { [weak self] result in
                     guard let self, let controller = self.environment?.controller(), let navigationController = controller.navigationController as? NavigationController else {

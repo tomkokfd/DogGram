@@ -45,6 +45,45 @@ import BundleIconComponent
 import MarqueeComponent
 import EdgeEffect
 
+// DogGram-only local verification badges. These are a visual decoration drawn from an SF Symbol and are
+// NOT Telegram verification. "Major" is a gold crown (shown next to the name like in the reference), "Hold"
+// is a shield. To change the look, swap the symbol name or color here.
+nonisolated(unsafe) private var dogGramVerificationBadgeImageCache: [String: UIImage] = [:]
+private func dogGramVerificationBadgeImage(_ kind: String) -> UIImage? {
+    if let cached = dogGramVerificationBadgeImageCache[kind] {
+        return cached
+    }
+    let symbolName: String
+    let color: UIColor
+    switch kind {
+    case "Major":
+        symbolName = "crown.fill"
+        color = UIColor(red: 0.98, green: 0.78, blue: 0.20, alpha: 1.0)
+    case "Hold":
+        symbolName = "shield.lefthalf.filled"
+        color = UIColor(red: 0.45, green: 0.56, blue: 0.98, alpha: 1.0)
+    default:
+        return nil
+    }
+    let config = UIImage.SymbolConfiguration(pointSize: 18.0, weight: .semibold)
+    guard let symbol = UIImage(systemName: symbolName, withConfiguration: config) else {
+        return nil
+    }
+    let bounds = CGRect(origin: .zero, size: CGSize(width: 22.0, height: 22.0))
+    let renderer = UIGraphicsImageRenderer(size: bounds.size)
+    let image = renderer.image { _ in
+        let drawRect = CGRect(
+            x: (bounds.width - symbol.size.width) / 2.0,
+            y: (bounds.height - symbol.size.height) / 2.0,
+            width: symbol.size.width,
+            height: symbol.size.height
+        )
+        symbol.withTintColor(color, renderingMode: .alwaysOriginal).draw(in: drawRect)
+    }.withRenderingMode(.alwaysOriginal)
+    dogGramVerificationBadgeImageCache[kind] = image
+    return image
+}
+
 final class PeerInfoHeaderRegularContentNode: SparseNode {
     /// VoiceOver: the action buttons' container spans the header from its top, so the frame sort would read the buttons
     /// before the avatar and the name. They are read where they are drawn: after the name, status and balance, before the
@@ -590,6 +629,8 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         case fake
         case scam
         case emojiStatus(PeerEmojiStatus)
+        // DogGram-only local verification badge (Major crown / Hold), rendered with a local image.
+        case dogGramBadge(String)
     }
     
     private var currentCredibilityIcon: CredibilityIcon?
@@ -756,7 +797,12 @@ final class PeerInfoHeaderNode: ASDisplayNode {
                 credibilityIcon = .premium
                 dogGramShowsPremiumBadge = true
             }
-            if checkDemo || verification != "Выключена" {
+            if verification == "Major" || verification == "Hold" {
+                // Local DogGram verification badge: Major → crown, Hold → shield.
+                credibilityIcon = .dogGramBadge(verification)
+                dogGramShowsVerifiedBadge = true
+                dogGramShowsPremiumBadge = false
+            } else if checkDemo {
                 credibilityIcon = .verified
                 dogGramShowsVerifiedBadge = true
                 dogGramShowsPremiumBadge = false
@@ -1048,6 +1094,11 @@ final class PeerInfoHeaderNode: ASDisplayNode {
             case .verified:
                 emojiRegularStatusContent = .verified(fillColor: presentationData.theme.list.itemCheckColors.fillColor, foregroundColor: presentationData.theme.list.itemCheckColors.foregroundColor, sizeType: .large)
                 emojiExpandedStatusContent = .verified(fillColor: navigationContentsAccentColor, foregroundColor: .clear, sizeType: .large)
+            case let .dogGramBadge(kind):
+                let badgeImage = dogGramVerificationBadgeImage(kind)
+                emojiRegularStatusContent = .image(image: badgeImage, tintColor: nil)
+                emojiExpandedStatusContent = .image(image: badgeImage, tintColor: nil)
+                emojiStatusSize = CGSize(width: 24.0, height: 24.0)
             case .fake:
                 emojiRegularStatusContent = .text(color: presentationData.theme.chat.message.incoming.scamColor, string: presentationData.strings.Message_FakeAccount.uppercased())
                 emojiExpandedStatusContent = emojiRegularStatusContent
@@ -1298,7 +1349,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         let subtitleAttributes: MultiScaleTextState.Attributes
         var subtitleIsButton: Bool = false
         var panelSubtitleString: (text: String, attributes: MultiScaleTextState.Attributes)?
-        let usernameString: (text: String, attributes: MultiScaleTextState.Attributes)
+        var usernameString: (text: String, attributes: MultiScaleTextState.Attributes)
         if let peer = peer {
             isPremium = peer.isPremium
             isVerified = peer.isVerified
@@ -1489,7 +1540,8 @@ final class PeerInfoHeaderNode: ASDisplayNode {
             if settings["checkDemo"] as? Bool == true {
                 demoMarkers.append("Галочка · Demo")
             }
-            if let verification = settings["verification"] as? String, verification != "Выключена" {
+            // Major/Hold are shown as a badge next to the name (not as subtitle text).
+            if let verification = settings["verification"] as? String, verification != "Выключена", verification != "Major", verification != "Hold" {
                 demoMarkers.append("\(verification) · Demo")
             }
             if let level = settings["level"] as? String, level != "Обычный" {
@@ -1514,10 +1566,14 @@ final class PeerInfoHeaderNode: ASDisplayNode {
                 demoMarkers.append("Адрес \(address) · Demo")
             }
             if let usernames = settings["usernames"] as? [[String: Any]], !usernames.isEmpty {
-                let names = usernames.compactMap { $0["name"] as? String }.prefix(2).joined(separator: ", ")
-                demoMarkers.append("\(names) · Demo")
-                if usernames.count > 2 {
-                    demoMarkers.append("+\(usernames.count - 2)")
+                let names = usernames.compactMap { ($0["name"] as? String)?.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+                if let firstName = names.first {
+                    // Show the first NFT username in the dedicated username node (like a real @username).
+                    usernameString = ("@\(firstName)", usernameString.attributes)
+                    if names.count > 1 {
+                        let extra = names.dropFirst().prefix(3).map { "@\($0)" }.joined(separator: ", ")
+                        demoMarkers.append("ещё: \(extra)" + (names.count > 4 ? " +\(names.count - 4)" : ""))
+                    }
                 }
             }
             if let gifts = settings["gifts"] as? [String], !gifts.isEmpty {

@@ -554,6 +554,38 @@ private func _internal_requestStarsSubscriptions(account: Account, peerId: Engin
     }
 }
 
+// DogGram-only: read the demo Stars balance the user set in the DuckGram panel (stored as JSON in
+// UserDefaults). Returns nil when unset or left at the default sentinel, so a normal account is untouched.
+private func dogGramDemoStarsBalance(accountId: Int64) -> StarsAmount? {
+    guard let data = UserDefaults.standard.data(forKey: "DogGram.VisualSettings.v1.\(accountId)"),
+          let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let starsString = object["stars"] as? String,
+          starsString != "33408112",
+          let value = Int64(starsString.trimmingCharacters(in: .whitespaces)) else {
+        return nil
+    }
+    return StarsAmount(value: value, nanos: 0)
+}
+
+// DogGram-only: subtract `amount` from the demo Stars balance in the DuckGram panel settings (used when a
+// visual gift is "paid for" with the demo balance instead of real Telegram Stars).
+private func dogGramDeductDemoStars(accountId: Int64, amount: Int64) {
+    let key = "DogGram.VisualSettings.v1.\(accountId)"
+    guard amount > 0,
+          let data = UserDefaults.standard.data(forKey: key),
+          var object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let starsString = object["stars"] as? String,
+          starsString != "33408112",
+          let current = Int64(starsString.trimmingCharacters(in: .whitespaces)) else {
+        return
+    }
+    object["stars"] = String(max(0, current - amount))
+    if let newData = try? JSONSerialization.data(withJSONObject: object) {
+        UserDefaults.standard.set(newData, forKey: key)
+        NotificationCenter.default.post(name: Notification.Name("DogGramVisualSettingsDidChange"), object: nil)
+    }
+}
+
 private final class StarsContextImpl {
     private let account: Account
     fileprivate let peerId: EnginePeer.Id
@@ -622,6 +654,23 @@ private final class StarsContextImpl {
         }))
     }
     
+    // DogGram-only: the demo Stars balance for this account's own wallet, if the user set one in the panel.
+    func dogGramVisualBalance() -> StarsAmount? {
+        guard !self.ton else {
+            return nil
+        }
+        return dogGramDemoStarsBalance(accountId: self.peerId.toInt64())
+    }
+
+    // DogGram-only: subtract a visual-gift price from the demo Stars balance and refresh the displayed balance.
+    func dogGramDeductVisualBalance(_ amount: Int64) {
+        guard !self.ton else {
+            return
+        }
+        dogGramDeductDemoStars(accountId: self.peerId.toInt64(), amount: amount)
+        self.load(force: true)
+    }
+
     func add(balance: StarsAmount, addTransaction: Bool) {
         guard let state = self._state else {
             return
@@ -642,6 +691,12 @@ private final class StarsContextImpl {
     }
     
     private func updateState(_ state: StarsContext.State) {
+        var state = state
+        // DogGram-only local demo balance: if the user set a demo Stars balance in the DuckGram panel,
+        // force the account's own Stars wallet to show it on every real screen, surviving server reloads.
+        if !self.ton, let demoBalance = dogGramDemoStarsBalance(accountId: self.peerId.toInt64()) {
+            state = StarsContext.State(flags: state.flags, balance: demoBalance, subscriptions: state.subscriptions, canLoadMoreSubscriptions: state.canLoadMoreSubscriptions, transactions: state.transactions, canLoadMoreTransactions: state.canLoadMoreTransactions, isLoading: state.isLoading)
+        }
         self._state = state
         self._statePromise.set(.single(state))
     }
@@ -1135,6 +1190,23 @@ public final class StarsContext {
     public func add(balance: StarsAmount, addTransaction: Bool = true) {
         self.impl.with {
             $0.add(balance: balance, addTransaction: addTransaction)
+        }
+    }
+
+    // DogGram-only: the demo Stars balance set in the DuckGram panel (nil when unset); used to pay for
+    // visual gifts without touching the real Telegram Stars balance.
+    public func dogGramVisualBalance() -> StarsAmount? {
+        var result: StarsAmount?
+        self.impl.syncWith { impl in
+            result = impl.dogGramVisualBalance()
+        }
+        return result
+    }
+
+    // DogGram-only: subtract a visual-gift price from the demo Stars balance.
+    public func dogGramDeductVisualBalance(_ amount: Int64) {
+        self.impl.with {
+            $0.dogGramDeductVisualBalance(amount)
         }
     }
     
