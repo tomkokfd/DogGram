@@ -19,10 +19,10 @@ private struct DogGramDemoAsset: Codable {
 }
 
 private struct DogGramVisualSettings: Codable {
-    var premiumDemo = true
+    var premiumDemo = false
     var checkDemo = false
-    var verification = "Major"
-    var level = "Настоящий"
+    var verification = "Выключена"
+    var level = "Обычный"
     var displayNumber = "+888"
     var stars = "33408112"
     var gram = "381.82"
@@ -76,17 +76,17 @@ private final class DogGramControlView: UIView {
         case "gifts": return "Подарки"
         case "nft": return "NFT-юзернеймы"
         case "style": return "Оформление"
-        default: return "Dog Gram Control"
+        default: return "DogGram"
         }
     }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        self.backgroundColor = .black
+        self.backgroundColor = UIColor(red: 0.09, green: 0.13, blue: 0.17, alpha: 1.0)
         self.scrollView.alwaysBounceVertical = true
         self.addSubview(self.scrollView)
         self.stack.axis = .vertical
-        self.stack.spacing = 18
+        self.stack.spacing = 12
         self.scrollView.addSubview(self.stack)
         self.scrollView.translatesAutoresizingMaskIntoConstraints = false
         self.stack.translatesAutoresizingMaskIntoConstraints = false
@@ -95,11 +95,11 @@ private final class DogGramControlView: UIView {
             self.scrollView.trailingAnchor.constraint(equalTo: self.trailingAnchor),
             self.scrollView.topAnchor.constraint(equalTo: self.topAnchor),
             self.scrollView.bottomAnchor.constraint(equalTo: self.bottomAnchor),
-            self.stack.leadingAnchor.constraint(equalTo: self.scrollView.leadingAnchor, constant: 16),
-            self.stack.trailingAnchor.constraint(equalTo: self.scrollView.trailingAnchor, constant: -16),
-            self.stack.topAnchor.constraint(equalTo: self.scrollView.topAnchor, constant: 20),
+            self.stack.leadingAnchor.constraint(equalTo: self.scrollView.leadingAnchor, constant: 12),
+            self.stack.trailingAnchor.constraint(equalTo: self.scrollView.trailingAnchor, constant: -12),
+            self.stack.topAnchor.constraint(equalTo: self.scrollView.topAnchor, constant: 12),
             self.stack.bottomAnchor.constraint(equalTo: self.scrollView.bottomAnchor, constant: -28),
-            self.stack.widthAnchor.constraint(equalTo: self.scrollView.widthAnchor, constant: -32)
+            self.stack.widthAnchor.constraint(equalTo: self.scrollView.widthAnchor, constant: -24)
         ])
         self.render()
     }
@@ -121,8 +121,8 @@ private final class DogGramControlView: UIView {
         case "check": self.settings.checkDemo.toggle()
         case "avatar": self.onImageRequested?()
         case "verification":
-            self.settings.verification = self.settings.verification == "Major" ? "Hold" : (self.settings.verification == "Hold" ? "Выключена" : "Major")
-        case "level": self.settings.level = self.settings.level == "Настоящий" ? "Пользовательский" : "Настоящий"
+            self.settings.verification = self.settings.verification == "Major · Demo" ? "Hold · Demo" : (self.settings.verification == "Hold · Demo" ? "Выключена" : "Major · Demo")
+        case "level": self.settings.level = self.settings.level == "Обычный" ? "Пользовательский · Demo" : "Обычный"
         case "number":
             self.onInputRequested?("Номер профиля · Demo", self.settings.displayNumber) { [weak self] value in
                 self?.settings.displayNumber = value
@@ -258,8 +258,9 @@ private final class DogGramControlView: UIView {
             self.addAvatarPreview()
             self.section([("Выбор профиля", "Мой профиль", "back"), ("Назад", "", "back")])
             self.section([("Локальный аватар", self.settings.avatarData == nil ? "Выбрать" : "Установлен · Demo", "avatar")])
-            self.section([("Telegram Premium · Demo", "", "premium"), ("Галочка Telegram · Demo", "", "check"), ("Верификация · Demo", self.settings.verification, "verification")])
+            self.section([("Premium в DogGram · Demo", "", "premium"), ("Значок в DogGram · Demo", "", "check"), ("Верификация · Demo", self.settings.verification, "verification")])
             self.section([("Добавить NFT-юзернейм", "", "nft"), ("Номер профиля · Demo", self.settings.displayNumber, "number"), ("Уровень · Demo", self.settings.level, "level"), ("Юзернеймы", "\(self.settings.usernames.count)", "nft")])
+            self.section([("Подарки DogGram · Demo", "\(self.settings.gifts.count)", "gifts"), ("Балансы DogGram · Demo", "Звёзды · GRAM", "balances")])
             self.section([("Цвета и фон профиля", "", "style"), ("Часы работы", self.settings.workingHours, "workingHours"), ("Адрес", self.settings.address, "address")])
         case "balances":
             self.section([("Выбор профиля", "Мой профиль", "back"), ("Назад", "", "back")])
@@ -274,7 +275,15 @@ private final class DogGramControlView: UIView {
             self.section(self.settings.gifts.map { ($0, "Demo", "sendGift") })
         case "nft":
             self.section([("Назад", "", "back"), ("Добавить юзернейм", "Demo", "addUsername")])
-            self.section(self.settings.usernames.map { ($0.name, "\($0.price) · Demo", "nft") })
+            self.section(self.settings.usernames.map { ($0.name, "\($0.price) \($0.currency) · NFT", "nft") })
+            if !self.settings.usernames.isEmpty {
+                let explanation = UILabel()
+                explanation.text = "Коллекционные имена Telegram приобретаются и управляются через Fragment. Здесь показана только локальная визуальная карточка DogGram."
+                explanation.textColor = UIColor(white: 0.68, alpha: 1.0)
+                explanation.numberOfLines = 0
+                explanation.font = .systemFont(ofSize: 13)
+                self.stack.addArrangedSubview(explanation)
+            }
         case "style":
             self.section([("Назад", "", "back"), ("Цвет профиля", self.settings.profileColor, "color"), ("Фоновое изображение", self.settings.profileBackground, "background"), ("Цветовая тема", self.settings.profileTheme, "theme"), ("Часы работы", self.settings.workingHours, "workingHours"), ("Адрес", self.settings.address, "address")])
             self.addAppearancePreview()
@@ -296,23 +305,23 @@ private final class DogGramControlView: UIView {
     private func section(_ rows: [(String, String, String)], destructive: Bool = false) {
         let card = UIStackView()
         card.axis = .vertical
-        card.backgroundColor = UIColor(white: 0.11, alpha: 1.0)
-        card.layer.cornerRadius = 14
+        card.backgroundColor = UIColor(red: 0.13, green: 0.19, blue: 0.24, alpha: 1.0)
+        card.layer.cornerRadius = 10
         card.clipsToBounds = true
         for (index, row) in rows.enumerated() {
             let rowView = UIView()
             let title = UILabel()
             title.text = row.0
             title.textColor = destructive ? .systemRed : .white
-            title.font = .systemFont(ofSize: 17, weight: .semibold)
+            title.font = .systemFont(ofSize: 17, weight: .regular)
             title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             let value = UILabel()
             value.text = row.1
-            value.textColor = UIColor(white: 0.62, alpha: 1.0)
-            value.font = .systemFont(ofSize: 16)
+            value.textColor = UIColor(red: 0.55, green: 0.72, blue: 0.82, alpha: 1.0)
+            value.font = .systemFont(ofSize: 15)
             value.textAlignment = .right
             let arrow = UIImageView(image: UIImage(systemName: "chevron.right"))
-            arrow.tintColor = UIColor(white: 0.40, alpha: 1.0)
+            arrow.tintColor = UIColor(red: 0.43, green: 0.55, blue: 0.62, alpha: 1.0)
             arrow.contentMode = .scaleAspectFit
             let toggle = UISwitch()
             toggle.isUserInteractionEnabled = false
@@ -355,7 +364,7 @@ private final class DogGramControlView: UIView {
             card.addArrangedSubview(rowView)
             if index < rows.count - 1 {
                 let divider = UIView()
-                divider.backgroundColor = UIColor(white: 0.20, alpha: 1.0)
+                divider.backgroundColor = UIColor(red: 0.18, green: 0.25, blue: 0.30, alpha: 1.0)
                 divider.heightAnchor.constraint(equalToConstant: 1.0 / UIScreen.main.scale).isActive = true
                 card.addArrangedSubview(divider)
             }
@@ -430,7 +439,7 @@ public final class DogGramControlController: TelegramBaseController, UIImagePick
 
     public init(context: AccountContext) {
         super.init(context: context, navigationBarPresentationData: nil)
-        self.title = "Dog Gram Control"
+        self.title = "DogGram"
     }
 
     required public init(coder aDecoder: NSCoder) {

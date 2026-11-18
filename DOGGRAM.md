@@ -52,9 +52,13 @@ The manual workflow is in `.github/workflows/doggram-ipa.yml`. Add these reposit
 
 Then open **Actions → Dog Gram IPA → Run workflow** and choose `debug_arm64`. GitHub uploads the fake-signed IPA as a downloadable workflow artifact. Download it to Windows and re-sign/install it with Sideloadly. The workflow is manual-only so a code push does not start a paid Mac build.
 
-## Work still needed
+## Current scope and limitations
 
-The live profile metadata bridge and first local control flows are in place. Applying the local avatar and background image directly to the Telegram self-profile, richer NFT cover management, a complete gift catalog, and supported real Telegram gift API integration still need work. The icon now uses a Dog Gram vector mark instead of Telegram's airplane. The source has not been compiled because this Windows environment does not include Xcode.
+The DogGram panel uses Telegram-like dark colors, system typography and grouped rows. Its settings are local to this installation and are only added to the signed-in user's profile preview in DogGram. They do not alter Telegram account state and are not synchronized to another person's DogGram installation. Premium, badges, verification, NFT usernames, gifts and balances in this panel are visual demo values; entering a number or adding an item does not make a payment or execute a Telegram operation. Demo operation history is descriptive only.
+
+Real Telegram features require Telegram's own account state and payment flows. Gifts and Stars use Telegram's payments API; collectible usernames are owned and managed through Fragment; official verification is granted by Telegram, while third-party verification is assigned by an eligible Telegram-verified bot. A label such as “Major” is not a Telegram verification tier. This fork does not provide server-backed DogGram accounts or custom remote synchronization, so local decorations cannot appear on another user's device.
+
+The icon uses a DogGram vector mark instead of Telegram's airplane. The source has not been compiled because this Windows environment does not include Xcode. Visual and simulator verification must be done on a Mac with Xcode.
 
 ## Source
 

@@ -1458,7 +1458,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
             if let verification = settings["verification"] as? String, verification != "Выключена" {
                 demoMarkers.append("\(verification) · Demo")
             }
-            if let level = settings["level"] as? String, level != "Настоящий" {
+            if let level = settings["level"] as? String, level != "Обычный" {
                 demoMarkers.append("Уровень \(level) · Demo")
             }
             if let displayNumber = settings["displayNumber"] as? String, displayNumber != "+888" {
@@ -1485,6 +1485,9 @@ final class PeerInfoHeaderNode: ASDisplayNode {
                 if usernames.count > 2 {
                     demoMarkers.append("+\(usernames.count - 2)")
                 }
+            }
+            if let gifts = settings["gifts"] as? [String], !gifts.isEmpty {
+                demoMarkers.append("Подарки DogGram ×\(gifts.count) · Demo")
             }
             if !demoMarkers.isEmpty {
                 let currentSubtitle = subtitleStringText.trimmingCharacters(in: .whitespacesAndNewlines)
